@@ -8,10 +8,10 @@
 #include "xh_elf.h"
 #include "xh_map.h"
 
-#define XH_MAP_FLAG_INITED      ((uint8_t)(1 << 0))
-#define XH_MAP_FLAG_INIT_FAILED ((uint8_t)(1 << 1))
-#define XH_MAP_FLAG_REFRESHED   ((uint8_t)(1 << 2))
-#define XH_MAP_FLAG_HOOKED      ((uint8_t)(1 << 3))
+#define XH_MAP_FLAG_INITED    ((uint8_t)(1 << 0))
+#define XH_MAP_FLAG_FAILED    ((uint8_t)(1 << 1))
+#define XH_MAP_FLAG_REFRESHED ((uint8_t)(1 << 2))
+#define XH_MAP_FLAG_HOOKED    ((uint8_t)(1 << 3))
 
 #define XH_MAP_FLAG_CHECK(v, f) (((v) & (f)) == 0 ? 0 : 1)
 #define XH_MAP_FLAG_ADD(v, f)   ((v) |= (f))
@@ -164,13 +164,18 @@ int xh_map_refresh(xh_map_t *self)
     return 0;
 }
 
-void xh_map_hook(xh_map_t *self, const char *filename, const char *symbol, void *new_func, void **old_func)
+int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol, void *new_func, void **old_func)
 {
-    xh_map_item_t *mi = NULL;
+    xh_map_item_t *mi  = NULL;
+    int            r   = 0;
+    int            ret = 0;
     
     RB_FOREACH(mi, xh_map_tree, &(self->maps))
     {
-        if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_INIT_FAILED)) continue;
+        //save the first error's number
+        if(0 != r && 0 == ret) ret = r;
+            
+        if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_FAILED)) continue;
         if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_HOOKED)) continue;
         
         if(NULL == filename || NULL != strstr(mi->pathname, filename))
@@ -178,17 +183,24 @@ void xh_map_hook(xh_map_t *self, const char *filename, const char *symbol, void 
             if(!XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_INITED))
             {
                 XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_INITED);
-                if(0 != xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname))
+                //init
+                if(0 != (r = xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname)))
                 {
-                    XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_INIT_FAILED);
+                    XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_FAILED);
                     continue;
                 }
             }
 
             //hook
-            xh_elf_hook(&(mi->elf), symbol, new_func, old_func);
+            if(0 != (r = xh_elf_hook(&(mi->elf), symbol, new_func, old_func)))
+            {
+                XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_FAILED);
+                continue;
+            }
         }
     }
+
+    return ret;
 }
 
 void xh_map_hook_finish(xh_map_t *self)

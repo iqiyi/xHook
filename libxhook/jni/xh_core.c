@@ -126,11 +126,12 @@ static void xh_core_dump()
 }
 #endif
 
-static void xh_core_refresh_impl()
+static int xh_core_refresh_impl()
 {
     xh_core_stat_t *st = NULL;
+    int             r  = 0;
 
-    if(0 != xh_map_refresh(xh_core_maps)) return;
+    if(0 != (r = xh_map_refresh(xh_core_maps))) return r;
 
     RB_FOREACH(st, xh_core_stat_tree, &xh_core_stats)
     {
@@ -144,6 +145,7 @@ static void xh_core_refresh_impl()
     }
 
     xh_map_hook_finish(xh_core_maps);
+    return r;
 }
 
 #if 0
@@ -210,14 +212,16 @@ static int xh_core_dlclose_new(void *handle)
 
 #endif
 
-void xh_core_refresh()
+int xh_core_refresh()
 {
+    int r = 0;
+    
     pthread_mutex_lock(&xh_core_mutex);
 
     if(NULL == xh_core_maps)
     {
         //do init here
-        if(0 != xh_map_create(&xh_core_maps))
+        if(0 != (r = xh_map_create(&xh_core_maps)))
         {
             xh_core_maps = NULL;
             goto end;
@@ -234,8 +238,9 @@ void xh_core_refresh()
 #endif
     }
 
-    xh_core_refresh_impl();
+    r = xh_core_refresh_impl();
 
  end:
     pthread_mutex_unlock(&xh_core_mutex);
+    return r;
 }
