@@ -1,4 +1,7 @@
 apply plugin: 'com.android.library'
+apply plugin: 'maven'
+
+def version = "1.0.1"
 
 android {
     compileSdkVersion 26
@@ -7,9 +10,7 @@ android {
         targetSdkVersion 26
         versionCode 1
         versionName "1.0"
-
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-
     }
     buildTypes {
         release {
@@ -20,6 +21,18 @@ android {
     sourceSets {
         main {
             jniLibs.srcDirs = ['libs']
+        }
+    }
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                repository(url: "http://maven.mbd.qiyi.domain/nexus/content/repositories/mcg-arch/") {
+                    authentication(userName: "mcg-arch", password: "123456")
+                }
+                pom.version = "$version"
+                pom.artifactId = "xhook"
+                pom.groupId = "com.qiyi.xhook"
+            }
         }
     }
 }
