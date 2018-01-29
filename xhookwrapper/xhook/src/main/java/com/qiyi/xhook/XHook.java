@@ -26,18 +26,28 @@ public class XHook {
             } catch (Throwable ex) {
                 ex.printStackTrace();
                 Log.e("xhook", "load libxhook.so failed");
-                return;
             }
         }
     }
 
-    public synchronized void refresh() {
+    public synchronized void enableDebug(boolean flag) {
         try {
-            com.qiyi.xhook.NativeHandler.getInstance().refresh();
+            com.qiyi.xhook.NativeHandler.getInstance().enableDebug(flag);
         } catch (Throwable ex) {
             ex.printStackTrace();
-            Log.e("xhook", "xhook native start failed");
-            return;
+            Log.e("xhook", "xhook native enableDebug failed");
         }
+    }
+
+    public synchronized int refresh() {
+        int ret;
+        try {
+            ret = com.qiyi.xhook.NativeHandler.getInstance().refresh();
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+            Log.e("xhook", "xhook native refresh failed");
+            ret = 100;
+        }
+        return ret;
     }
 }

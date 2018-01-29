@@ -14,13 +14,18 @@ public class MainActivity extends AppCompatActivity {
         //init the target lib
         com.qiyi.test.Test.getInstance().init();
 
-        //init xhook lib and xhook-user lib
+        //init xhook
         com.qiyi.xhook.XHook.getInstance().init(this.getApplicationContext());
+        com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
+
+        //init your biz lib
         com.qiyi.biz.Biz.getInstance().init();
 
         //target lib running
         com.qiyi.test.Test.getInstance().start();
 
+        //for debug, get a chance to the target lib to run before hooked
+        //you can compare the different before and after hooking
         try {
             Thread.sleep(200);
         } catch (InterruptedException e) {
