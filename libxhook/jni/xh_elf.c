@@ -434,7 +434,7 @@ static int xh_elf_set_mem_access(ElfW(Addr) addr, int prots)
 
 static void xh_elf_clear_cache(ElfW(Addr) addr)
 {
-#if 1
+#if 0
 #if defined(__LP64__)
     (void)addr;
     return;
@@ -444,7 +444,7 @@ static void xh_elf_clear_cache(ElfW(Addr) addr)
 #endif
 
     //use gcc buildin func
-    //__builtin___clear_cache((void *)PAGE_START(addr), (void *)PAGE_END(addr));
+    __builtin___clear_cache((void *)PAGE_START(addr), (void *)PAGE_END(addr));
 }
 
 static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr) addr, void *new_func, void **old_func)
@@ -966,7 +966,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
     XH_LOG_INFO("hooking %s in %s\n", symbol, self->pathname);
     
     //find symbol index by symbol name
-    if(0 != (r = xh_elf_find_symidx_by_name(self, symbol, &symidx))) return r;
+    if(0 != (r = xh_elf_find_symidx_by_name(self, symbol, &symidx))) return 0;
     
     //replace for .rel(a).plt
     if(0 != self->relplt)
