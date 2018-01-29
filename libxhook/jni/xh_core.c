@@ -13,37 +13,46 @@
 
 #define XH_CORE_DEBUG 0
 
-typedef struct xh_core_stat
+//filename -> new_func, old_func
+typedef struct xh_core_stat_filename
 {
     const char  *filename;
-    const char  *symbol;
     void        *new_func;
     void       **old_func;
-    RB_ENTRY(xh_core_stat) link;
-} xh_core_stat_t;
-static __inline__ int xh_core_stat_cmp(xh_core_stat_t *a, xh_core_stat_t *b)
+    RB_ENTRY(xh_core_stat_filename) link;    
+} xh_core_stat_filename_t;
+static __inline__ int xh_core_stat_filename_cmp(xh_core_stat_filename_t *a, xh_core_stat_filename_t *b)
 {
-    if(NULL != a->filename && NULL == b->filename)
+    if(NULL == a->filename && NULL == b->filename)
+        return 0;
+    else if(NULL != a->filename && NULL == b->filename)
         return 1;
     else if(NULL == a->filename && NULL != b->filename)
         return -1;
-    else if(NULL == a->filename && NULL == b->filename)
-        return strcmp(a->symbol, b->symbol);
     else
-    {
-        int r = strcmp(a->filename, b->filename);
-        if(0 != r)
-            return r;
-        else
-            return strcmp(a->symbol, b->symbol);
-    }
+        return strcmp(a->filename, b->filename);
 }
-typedef RB_HEAD(xh_core_stat_tree, xh_core_stat) xh_core_stat_tree_t;
-RB_GENERATE_STATIC(xh_core_stat_tree, xh_core_stat, link, xh_core_stat_cmp)
+typedef RB_HEAD(xh_core_stat_filename_tree, xh_core_stat_filename) xh_core_stat_filename_tree_t;
+RB_GENERATE_STATIC(xh_core_stat_filename_tree, xh_core_stat_filename, link, xh_core_stat_filename_cmp)
 
-static pthread_mutex_t      xh_core_mutex = PTHREAD_MUTEX_INITIALIZER;
-static xh_core_stat_tree_t  xh_core_stats = RB_INITIALIZER(NULL);
-static xh_map_t            *xh_core_maps  = NULL;
+//symbol -> filename(s)
+typedef struct xh_core_stat_symbol
+{
+    const char                   *symbol;
+    xh_core_stat_filename_tree_t  filename_tree;
+    int                           have_wildcard;
+    RB_ENTRY(xh_core_stat_symbol) link;
+} xh_core_stat_symbol_t;
+static __inline__ int xh_core_stat_symbol_cmp(xh_core_stat_symbol_t *a, xh_core_stat_symbol_t *b)
+{
+    return strcmp(a->symbol, b->symbol);
+}
+typedef RB_HEAD(xh_core_stat_symbol_tree, xh_core_stat_symbol) xh_core_stat_symbol_tree_t;
+RB_GENERATE_STATIC(xh_core_stat_symbol_tree, xh_core_stat_symbol, link, xh_core_stat_symbol_cmp)
+
+static pthread_mutex_t             xh_core_mutex        = PTHREAD_MUTEX_INITIALIZER;
+static xh_core_stat_symbol_tree_t  xh_core_stat_symbols = RB_INITIALIZER(NULL);
+static xh_map_t                   *xh_core_maps         = NULL;
 
 void xh_core_set_log_priority(android_LogPriority priority)
 {
@@ -52,44 +61,55 @@ void xh_core_set_log_priority(android_LogPriority priority)
 
 static int xh_core_hook_impl(const char *filename, const char *symbol, void *new_func, void **old_func)
 {
-    xh_core_stat_t  st_key = {.filename = filename, .symbol = symbol};
-    xh_core_stat_t *st     = NULL;
-    int             r      = 0;
+    xh_core_stat_symbol_t    st_symbol_key   = {.symbol = symbol};
+    xh_core_stat_symbol_t   *st_symbol       = NULL;
+    xh_core_stat_filename_t  st_filename_key = {.filename = filename};
+    xh_core_stat_filename_t *st_filename     = NULL;
 
     if(NULL == symbol || 0 == new_func) return XH_ERRNO_INVAL;
 
-    if(NULL != RB_FIND(xh_core_stat_tree, &xh_core_stats, &st_key)) return XH_ERRNO_REPEAT;
+    if(NULL != (st_symbol = RB_FIND(xh_core_stat_symbol_tree, &xh_core_stat_symbols, &st_symbol_key)) &&
+       NULL != RB_FIND(xh_core_stat_filename_tree, &(st_symbol->filename_tree), &st_filename_key))
+        return XH_ERRNO_REPEAT;
 
-    if(NULL == (st = malloc(sizeof(xh_core_stat_t)))) return XH_ERRNO_NOMEM;
-    st->filename = NULL;
+    if(NULL == st_symbol)
+    {
+        //new symbol info
+        if(NULL == (st_symbol = malloc(sizeof(xh_core_stat_symbol_t)))) return XH_ERRNO_NOMEM;
+        if(NULL == (st_symbol->symbol = strdup(symbol)))
+        {
+            free(st_symbol);
+            return XH_ERRNO_NOMEM;
+        }
+        RB_INIT(&(st_symbol->filename_tree));
+        st_symbol->have_wildcard = 0;
+
+        //insert symbol info to tree
+        RB_INSERT(xh_core_stat_symbol_tree, &xh_core_stat_symbols, st_symbol);
+    }
+
+    //new filename info
+    if(NULL == (st_filename = malloc(sizeof(xh_core_stat_filename_t)))) return XH_ERRNO_NOMEM;
     if(NULL != filename)
     {
-        if(NULL == (st->filename = strdup(filename)))
+        if(NULL == (st_filename->filename = strdup(filename)))
         {
-            r = XH_ERRNO_NOMEM;
-            goto err;
+            free(st_filename);
+            return XH_ERRNO_NOMEM;
         }
     }
-    if(NULL == (st->symbol = strdup(symbol)))
+    else
     {
-        r = XH_ERRNO_NOMEM;
-        goto err;
+        st_filename->filename = NULL;
+        st_symbol->have_wildcard = 1;
     }
-    st->new_func = new_func;
-    st->old_func = old_func;
+    st_filename->new_func = new_func;
+    st_filename->old_func = old_func;
 
-    RB_INSERT(xh_core_stat_tree, &xh_core_stats, st);
-    if(old_func) *old_func = NULL;
+    //insert filename info into symbol info
+    RB_INSERT(xh_core_stat_filename_tree, &(st_symbol->filename_tree), st_filename);
+    
     return 0;
-
- err:
-    if(NULL != st)
-    {
-        if(NULL != st->symbol) free((void *)st->symbol);
-        if(NULL != st->filename) free((void *)st->filename);
-        free(st);
-    }
-    return r;
 }
 
 int xh_core_hook(const char *filename, const char *symbol, void *new_func, void **old_func)
@@ -110,42 +130,68 @@ int xh_core_hook(const char *filename, const char *symbol, void *new_func, void 
 #if XH_CORE_DEBUG
 static void xh_core_dump()
 {
-    xh_core_stat_t *st = NULL;
-
-    if(xh_log_priority < ANDROID_LOG_DEBUG) return;
+    xh_core_stat_symbol_t   *st_symbol;
+    xh_core_stat_filename_t *st_filename;
 
     XH_LOG_DEBUG("Stat:\n");
-    RB_FOREACH(st, xh_core_stat_tree, &xh_core_stats)
+    RB_FOREACH(st_symbol, xh_core_stat_symbol_tree, &xh_core_stat_symbols)
     {
-        XH_LOG_DEBUG("  %s : %s : %p -> %p\n",
-                     (NULL == st->filename ? "*" : st->filename),
-                     st->symbol,
-                     (st->old_func ? *(st->old_func) : 0),
-                     st->new_func);
+        RB_FOREACH(st_filename, xh_core_stat_filename_tree, &(st_symbol->filename_tree))
+        {
+            XH_LOG_INFO("  %s : %s : %p -> %p\n",
+                        st_symbol->symbol,
+                        (NULL == st_filename->filename ? "*" : st_filename->filename),
+                        (st_filename->old_func ? *(st_filename->old_func) : 0),
+                        st_filename->new_func);
+        }
     }
 }
 #endif
 
+static int xh_core_need_hook_check(const char *pathname, const char *filename, void *arg)
+{
+    xh_core_stat_symbol_t   *st_symbol;
+    xh_core_stat_filename_t *st_filename;
+
+    if(NULL != filename)
+    {
+        if(NULL != strstr(pathname, filename))
+            return 1;
+        else
+            return 0;
+    }
+    else
+    {
+        st_symbol = (xh_core_stat_symbol_t *)arg;
+        RB_FOREACH(st_filename, xh_core_stat_filename_tree, &(st_symbol->filename_tree))
+        {
+            if(NULL != st_filename->filename && NULL != strstr(pathname, st_filename->filename))
+                return 0;
+        }
+        return 1;
+    }
+}
+
 static int xh_core_refresh_impl()
 {
-    xh_core_stat_t *st = NULL;
-    int             r  = 0;
+    xh_core_stat_symbol_t   *st_symbol;
+    xh_core_stat_filename_t *st_filename;
+    int                      r;
 
     if(0 != (r = xh_map_refresh(xh_core_maps))) return r;
 
-    RB_FOREACH(st, xh_core_stat_tree, &xh_core_stats)
+    RB_FOREACH(st_symbol, xh_core_stat_symbol_tree, &xh_core_stat_symbols)
     {
-        if(NULL == st->filename)
-            xh_map_hook(xh_core_maps, st->filename, st->symbol, st->new_func, st->old_func);
+        RB_FOREACH(st_filename, xh_core_stat_filename_tree, &(st_symbol->filename_tree))
+        {
+            xh_map_hook(xh_core_maps, st_filename->filename, st_symbol->symbol,
+                        st_filename->new_func, st_filename->old_func,
+                        xh_core_need_hook_check, (void *)st_symbol);
+        }
     }
-    RB_FOREACH(st, xh_core_stat_tree, &xh_core_stats)
-    {
-        if(NULL != st->filename)
-            xh_map_hook(xh_core_maps, st->filename, st->symbol, st->new_func, st->old_func);
-    }
-
+    
     xh_map_hook_finish(xh_core_maps);
-    return r;
+    return 0;
 }
 
 #if 0

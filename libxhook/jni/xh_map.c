@@ -164,7 +164,9 @@ int xh_map_refresh(xh_map_t *self)
     return 0;
 }
 
-int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol, void *new_func, void **old_func)
+int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol,
+                void *new_func, void **old_func,
+                xh_map_need_hook_check_t need_hook_check, void *arg)
 {
     xh_map_item_t *mi  = NULL;
     int            r   = 0;
@@ -177,8 +179,8 @@ int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol, void *
             
         if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_FAILED)) continue;
         if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_HOOKED)) continue;
-        
-        if(NULL == filename || NULL != strstr(mi->pathname, filename))
+
+        if(need_hook_check(mi->pathname, filename, arg))
         {
             if(!XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_INITED))
             {
