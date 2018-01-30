@@ -22,7 +22,11 @@ public class XHook {
         return inited;
     }
 
-    public synchronized void init(Context ctx) {
+    public synchronized boolean init(Context ctx) {
+        if(inited) {
+            return true;
+        }
+
         try {
             System.loadLibrary("xhook");
             inited = true;
@@ -35,6 +39,7 @@ public class XHook {
                 Log.e("xhook", "load libxhook.so failed");
             }
         }
+        return inited;
     }
 
     public synchronized void enableDebug(boolean flag) {
