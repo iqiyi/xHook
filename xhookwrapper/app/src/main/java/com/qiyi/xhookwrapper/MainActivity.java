@@ -16,6 +16,9 @@ public class MainActivity extends AppCompatActivity {
 
         //init xhook
         com.qiyi.xhook.XHook.getInstance().init(this.getApplicationContext());
+        if(!com.qiyi.xhook.XHook.getInstance().isInited()) {
+            return;
+        }
         com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
 
         //init your biz lib
