@@ -10,6 +10,10 @@ extern "C" {
 void xh_core_set_log_priority(android_LogPriority priority);
 
 int xh_core_hook(const char *filename, const char *symbol, void *new_func, void **old_func);
+int xh_core_unhook(const char *filename, const char *symbol);
+
+int xh_core_start();
+int xh_core_stop();
 
 int xh_core_refresh();
 

@@ -60,7 +60,8 @@ int xh_map_destroy(xh_map_t **self)
     return 0;
 }
 
-void xh_map_dump(xh_map_t *self)
+#if 0
+static void xh_map_dump(xh_map_t *self)
 {
     xh_map_item_t *mi = NULL;
     
@@ -70,6 +71,7 @@ void xh_map_dump(xh_map_t *self)
         XH_LOG_DEBUG("  %"PRIxPTR" %s\n", mi->base_addr, mi->pathname);
     }
 }
+#endif
 
 int xh_map_refresh(xh_map_t *self)
 {

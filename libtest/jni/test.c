@@ -15,14 +15,11 @@ static void *new_thread_func(void *arg)
     while(1)
     {
         my_log_t my_local_log_ptr2 = (my_log_t)__android_log_print;
-        
-        __android_log_print(ANDROID_LOG_DEBUG, "mytag", "call directly. %u\n", i);
-        my_global_log_ptr(ANDROID_LOG_DEBUG, "mytag", "call from global ptr. %u\n", i);
-        my_local_log_ptr(ANDROID_LOG_DEBUG, "mytag", "call from local ptr. %u (hooking maybe failed)\n", i);
-        my_local_log_ptr2(ANDROID_LOG_DEBUG, "mytag", "call from local ptr2. %u\n", i);
-        
+        __android_log_print(ANDROID_LOG_DEBUG, "mytest", "call directly. %u\n", i);
+        my_global_log_ptr(ANDROID_LOG_DEBUG, "mytest", "call from global ptr. %u\n", i);
+        my_local_log_ptr(ANDROID_LOG_DEBUG, "mytest", "call from local ptr. %u (hooking maybe failed)\n", i);
+        my_local_log_ptr2(ANDROID_LOG_DEBUG, "mytest", "call from local ptr2. %u\n", i);
         i++;
-        
         sleep(1);
     }
     

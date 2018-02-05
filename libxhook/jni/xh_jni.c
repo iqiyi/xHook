@@ -11,6 +11,22 @@ JNIEXPORT void JNI_API_DEF(enableDebug)(JNIEnv *env, jobject obj, jboolean flag)
     xh_core_set_log_priority(flag ? ANDROID_LOG_INFO : ANDROID_LOG_WARN);
 }
 
+JNIEXPORT jint JNI_API_DEF(start)(JNIEnv *env, jobject obj)
+{
+    (void)env;
+    (void)obj;
+
+    return xh_core_start();
+}
+
+JNIEXPORT jint JNI_API_DEF(stop)(JNIEnv *env, jobject obj)
+{
+    (void)env;
+    (void)obj;
+
+    return xh_core_stop();
+}
+
 JNIEXPORT jint JNI_API_DEF(refresh)(JNIEnv *env, jobject obj)
 {
     (void)env;
