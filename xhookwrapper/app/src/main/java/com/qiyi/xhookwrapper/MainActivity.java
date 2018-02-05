@@ -36,10 +36,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         //register hook points
-        com.qiyi.biz.Biz.getInstance().hook();
+        com.qiyi.biz.Biz.getInstance().start();
 
-        //do refresh
-        com.qiyi.xhook.XHook.getInstance().refresh();
+        //do start (and hook)
+        com.qiyi.xhook.XHook.getInstance().start();
 
         //do refresh for some reason, maybe called after some System.loadLibrary()
         new Thread(new Runnable() {

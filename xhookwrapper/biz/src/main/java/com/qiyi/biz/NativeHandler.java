@@ -14,5 +14,5 @@ public class NativeHandler {
     private NativeHandler() {
     }
 
-    public native void hook();
+    public native void start();
 }

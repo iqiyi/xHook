@@ -14,6 +14,10 @@ public class NativeHandler {
     private NativeHandler() {
     }
 
+    public native int start();
+
+    public native int stop();
+
     public native int refresh();
 
     public native void enableDebug(boolean flag);

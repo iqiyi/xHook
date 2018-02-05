@@ -55,9 +55,41 @@ public class XHook {
         }
     }
 
+    public synchronized int start() {
+        if(!inited) {
+            return 10000;
+        }
+
+        int ret;
+        try {
+            ret = com.qiyi.xhook.NativeHandler.getInstance().start();
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+            Log.e("xhook", "xhook native start failed");
+            ret = 10001;
+        }
+        return ret;
+    }
+
+    public synchronized int stop() {
+        if(!inited) {
+            return 10000;
+        }
+
+        int ret;
+        try {
+            ret = com.qiyi.xhook.NativeHandler.getInstance().stop();
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+            Log.e("xhook", "xhook native stop failed");
+            ret = 10001;
+        }
+        return ret;
+    }
+
     public synchronized int refresh() {
         if(!inited) {
-            return 100;
+            return 10000;
         }
 
         int ret;
@@ -66,7 +98,7 @@ public class XHook {
         } catch (Throwable ex) {
             ex.printStackTrace();
             Log.e("xhook", "xhook native refresh failed");
-            ret = 101;
+            ret = 10001;
         }
         return ret;
     }

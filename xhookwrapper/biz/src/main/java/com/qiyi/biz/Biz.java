@@ -18,7 +18,7 @@ public class Biz {
         System.loadLibrary("biz");
     }
 
-    public synchronized void hook() {
-        com.qiyi.biz.NativeHandler.getInstance().hook();
+    public synchronized void start() {
+        com.qiyi.biz.NativeHandler.getInstance().start();
     }
 }
