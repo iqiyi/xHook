@@ -21,4 +21,8 @@ public class NativeHandler {
     public native int refresh();
 
     public native void enableDebug(boolean flag);
+
+    public native void enableSystemHook(boolean flag);
+
+    public native void enableReldynHook(boolean flag);
 }

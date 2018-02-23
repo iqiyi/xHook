@@ -20,6 +20,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
+        //com.qiyi.xhook.XHook.getInstance().enableSystemHook(true); //default is false
+        //com.qiyi.xhook.XHook.getInstance().enableReldynHook(true); //default is false
 
         //init your biz lib
         com.qiyi.biz.Biz.getInstance().init();
