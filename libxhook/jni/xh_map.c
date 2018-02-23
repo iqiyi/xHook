@@ -36,12 +36,55 @@ RB_GENERATE_STATIC(xh_map_tree, xh_map_item, link, xh_map_item_cmp)
 struct xh_map
 {
     xh_map_tree_t maps;
+    int           system_hook;
+    int           reldyn_hook;
 };
 
-int xh_map_create(xh_map_t **self)
+static const char* const xh_map_sys_elf_dirs[] = {
+    "/system/",
+    "/vendor/"
+};
+
+static int xh_map_is_sys_elf(const char *pathname)
+{
+    const char *dir;
+    size_t      i, j;
+    int         flag;
+    
+    if(NULL == pathname) return 0;
+
+    for(i = 0; i < (sizeof(xh_map_sys_elf_dirs) / sizeof(const char *)); i++)
+    {
+        dir = xh_map_sys_elf_dirs[i];
+        flag = 1;
+        
+        for(j = 0; '\0' != dir[j] && '\0' != pathname[j]; j++)
+        {
+            if(dir[j] != pathname[j])
+            {
+                flag = 0;
+                break;
+            }
+        }
+        
+        if('\0' != dir[j])
+        {
+            flag = 0;
+        }
+        
+        if(1 == flag)
+            return 1;
+    }
+
+    return 0;
+}
+
+int xh_map_create(xh_map_t **self, int system_hook, int reldyn_hook)
 {
     if(NULL == (*self = malloc(sizeof(xh_map_t)))) return XH_ERRNO_NOMEM;
     RB_INIT(&((*self)->maps));
+    (*self)->system_hook = system_hook;
+    (*self)->reldyn_hook = reldyn_hook;
     return 0;
 }
 
@@ -118,6 +161,9 @@ int xh_map_refresh(xh_map_t *self)
         if(0 == pathname_len) continue;        
         if('[' == pathname[0]) continue;
 
+        //need not hook system lib?
+        if((!(self->system_hook)) && xh_map_is_sys_elf(pathname)) continue;
+
         //check elf
         if(0 != xh_elf_check_elfheader(base_addr)) continue;
         
@@ -163,6 +209,7 @@ int xh_map_refresh(xh_map_t *self)
     }
 
     XH_LOG_INFO("map refreshed");
+    //xh_map_dump(self);
     return 0;
 }
 
@@ -188,7 +235,7 @@ int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol,
             {
                 XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_INITED);
                 //init
-                if(0 != (r = xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname)))
+                if(0 != (r = xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname, self->reldyn_hook)))
                 {
                     XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_FAILED);
                     continue;

@@ -57,10 +57,22 @@ static pthread_cond_t         xh_core_cond         = PTHREAD_COND_INITIALIZER;
 static pthread_t              xh_core_refresh_tid;
 static volatile int           xh_core_running      = 0;
 static volatile int           xh_core_refresh_need = 0;
+static int                    xh_core_system_hook  = 0;
+static int                    xh_core_reldyn_hook  = 0;
 
 void xh_core_set_log_priority(android_LogPriority priority)
 {
     xh_log_priority = priority;
+}
+
+void xh_core_set_system_hook(int flag)
+{
+    xh_core_system_hook = flag;
+}
+
+void xh_core_set_reldyn_hook(int flag)
+{
+    xh_core_reldyn_hook = flag;
 }
 
 static int xh_core_hook_impl(const char *filename, const char *symbol, void *new_func, void **old_func)
@@ -266,7 +278,7 @@ int xh_core_start()
     //xh_core_hook_dl();
 
     //create map
-    if(0 != (r = xh_map_create(&xh_core_maps))) goto end;
+    if(0 != (r = xh_map_create(&xh_core_maps, xh_core_system_hook, xh_core_reldyn_hook))) goto end;
 
     //start refresh loop func
     xh_core_running = 1;

@@ -40,7 +40,7 @@ static void *new_thread_func(void *arg)
     
     while(1)
     {
-        __android_log_print(ANDROID_LOG_DEBUG, "mybiz", "call directly. %u\n", i);
+        __android_log_print(ANDROID_LOG_DEBUG, "mybiz", "call directly. %u (unhook)\n", i);
         i++;
         sleep(1);
     }

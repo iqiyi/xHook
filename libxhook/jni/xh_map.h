@@ -10,7 +10,7 @@ extern "C" {
 typedef struct xh_map xh_map_t;
 typedef int (*xh_map_need_hook_check_t)(const char *pathname, const char *filename, void *arg);
 
-int xh_map_create(xh_map_t **self);
+int xh_map_create(xh_map_t **self, int system_hook, int reldyn_hook);
 int xh_map_destroy(xh_map_t **self);
 
 int xh_map_refresh(xh_map_t *self);

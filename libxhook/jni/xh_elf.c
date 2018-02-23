@@ -296,18 +296,22 @@ static uint32_t xh_elf_gnu_hash(const uint8_t *name)
     return h;
 }
 
-static ElfW(Phdr) *xh_elf_get_first_segment_by_type(xh_elf_t *self, const ElfW(Word) type)
+static ElfW(Phdr) *xh_elf_get_lowest_segment_by_type(xh_elf_t *self, const ElfW(Word) type)
 {
     ElfW(Phdr) *phdr;
+    ElfW(Phdr) *target_phdr = NULL;
     
     for(phdr = self->phdr; phdr < self->phdr + self->ehdr->e_phnum; phdr++)
     {
         if(phdr->p_type == type)
         {
-            return phdr;
+            if(NULL == target_phdr || phdr->p_vaddr < target_phdr->p_vaddr)
+            {
+                target_phdr = phdr;
+            }
         }
     }
-    return NULL;
+    return target_phdr;
 }
 
 static int xh_elf_hash_lookup(xh_elf_t *self, const char *symbol, uint32_t *symidx)
@@ -405,17 +409,15 @@ static int xh_elf_find_symidx_by_name(xh_elf_t *self, const char *symbol, uint32
 static int xh_elf_get_mem_access(xh_elf_t *self, ElfW(Addr) addr, uint32_t* prots)
 {
     ElfW(Phdr) *phdr;
+    ElfW(Addr)  seg_page_start;
+    ElfW(Addr)  seg_page_end;
     
     for(phdr = self->phdr; phdr < self->phdr + self->ehdr->e_phnum; phdr++)
     {
         if(phdr->p_type == PT_LOAD)
         {
-            ElfW(Addr) seg_start = self->bias_addr + phdr->p_vaddr;
-            ElfW(Addr) seg_end   = seg_start + phdr->p_memsz;
-
-            ElfW(Addr) seg_page_start = PAGE_START(seg_start);
-            ElfW(Addr) seg_page_end   = PAGE_END(seg_end);
-
+            seg_page_start = PAGE_START(self->bias_addr + phdr->p_vaddr);
+            seg_page_end   = PAGE_END(self->bias_addr + phdr->p_vaddr + phdr->p_memsz);
             if (addr >= seg_page_start && addr < seg_page_end)
             {
                 *prots = phdr->p_flags;
@@ -464,8 +466,9 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
     }
 
     //set new ports
+    prots |= PF_R;
     prots |= PF_W;
-    prots &= ~PF_X;
+    //prots &= ~PF_X;
     if(xh_elf_set_mem_access(addr, prots))
     {
         XH_LOG_ERROR("set mem access fails. errno: %d", errno);
@@ -752,18 +755,19 @@ static void xh_elf_dump(xh_elf_t *self)
 
 #endif
 
-int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
+int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int reldyn_hook)
 {
     if(NULL != self->pathname) return 0; //inited?
 
     if(NULL == pathname) return XH_ERRNO_INVAL;
-    
-    self->base_addr = (ElfW(Addr))base_addr;
-    self->ehdr      = (ElfW(Ehdr) *)base_addr;
-    self->phdr      = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
+
+    self->reldyn_hook = reldyn_hook;
+    self->base_addr   = (ElfW(Addr))base_addr;
+    self->ehdr        = (ElfW(Ehdr) *)base_addr;
+    self->phdr        = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
 
     //find the first load-segment
-    ElfW(Phdr) *lhdr = xh_elf_get_first_segment_by_type(self, PT_LOAD);
+    ElfW(Phdr) *lhdr = xh_elf_get_lowest_segment_by_type(self, PT_LOAD);
 
     //check first load-segment's offset
     //"offset NOT 0" means we have to read ELF info from local file, not from memory
@@ -778,7 +782,7 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
     self->bias_addr = self->base_addr - lhdr->p_vaddr;
     
     //find dynamic-segment
-    ElfW(Phdr) *dhdr = xh_elf_get_first_segment_by_type(self, PT_DYNAMIC);
+    ElfW(Phdr) *dhdr = xh_elf_get_lowest_segment_by_type(self, PT_DYNAMIC);
     if(NULL == dhdr)
     {
         XH_LOG_ERROR("Can NOT found dynamic segment. %s", pathname);
@@ -786,15 +790,19 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
     }
 
     //parse dynamic-segment
-    self->dyn = (ElfW(Dyn) *)(self->bias_addr + dhdr->p_vaddr);
-    self->dyn_sz = dhdr->p_memsz;
-    ElfW(Dyn) *dyn = self->dyn;
+    self->dyn          = (ElfW(Dyn) *)(self->bias_addr + dhdr->p_vaddr);
+    self->dyn_sz       = dhdr->p_memsz;
+    ElfW(Dyn) *dyn     = self->dyn;
     ElfW(Dyn) *dyn_end = self->dyn + (self->dyn_sz / sizeof(ElfW(Dyn)));
-    uint32_t *raw;
+    uint32_t  *raw;
     for(; dyn < dyn_end; dyn++)
     {
         switch(dyn->d_tag)
         {
+        case DT_NULL:
+            //the end of the dynamic-section
+            dyn = dyn_end;
+            break;
         case DT_STRTAB:
             self->strtab = (const char *)(self->bias_addr + dyn->d_un.d_ptr);
             break;
@@ -983,7 +991,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
     }
 
     //replace for .rel(a).dyn
-    if(0 != self->reldyn)
+    if(0 != self->reldyn && self->reldyn_hook)
     {
         xh_elf_plain_reloc_iterator_init(&plain_iter, self->reldyn, self->reldyn_sz, self->is_use_rela);
         while(NULL != (rel_common = xh_elf_plain_reloc_iterator_next(&plain_iter)))
@@ -996,7 +1004,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
     }
 
     //replace for .rel(a).android
-    if(0 != self->relandroid)
+    if(0 != self->relandroid && self->reldyn_hook)
     {
         xh_elf_packed_reloc_iterator_init(&packed_iter, self->relandroid, self->relandroid_sz, self->is_use_rela);
         while(NULL != (rel_common = xh_elf_packed_reloc_iterator_next(&packed_iter)))

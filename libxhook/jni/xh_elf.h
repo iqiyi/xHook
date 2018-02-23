@@ -12,6 +12,7 @@ extern "C" {
 typedef struct
 {
     const char *pathname;
+    int         reldyn_hook;
     
     ElfW(Addr)  base_addr;
     ElfW(Addr)  bias_addr;
@@ -50,7 +51,7 @@ typedef struct
     int         is_use_gnu_hash;
 } xh_elf_t;
 
-int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname);
+int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int reldyn_hook);
 void xh_elf_reset(xh_elf_t *self);
 
 int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_func);
