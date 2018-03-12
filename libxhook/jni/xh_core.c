@@ -240,6 +240,8 @@ static void *xh_core_refresh_loop_func(void *arg)
 {
     (void)arg;
     
+    pthread_setname_np(xh_core_refresh_tid, "xh_refresh_loop");
+
     while(xh_core_running)
     {
         //waiting for a refresh task or exit
@@ -283,7 +285,6 @@ int xh_core_start()
     //start refresh loop func
     xh_core_running = 1;
     if(0 != (r = pthread_create(&xh_core_refresh_tid, NULL, &xh_core_refresh_loop_func, NULL))) goto end;
-    pthread_setname_np(xh_core_refresh_tid, "xh_refresh_loop");
 
     //do the first refresh
     xh_core_refresh_need = 1;

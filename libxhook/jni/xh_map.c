@@ -161,8 +161,16 @@ int xh_map_refresh(xh_map_t *self)
         if(0 == pathname_len) continue;        
         if('[' == pathname[0]) continue;
 
-        //need not hook system lib?
-        if((!(self->system_hook)) && xh_map_is_sys_elf(pathname)) continue;
+        //check for app lib
+        if(!(self->system_hook))
+        {
+            //ignore system lib
+            if(xh_map_is_sys_elf(pathname)) continue;
+
+            // check filename
+            if(pathname_len < 4) continue;
+            if(0 != strcmp(pathname + pathname_len - 3, ".so")) continue;
+        }
 
         //check elf
         if(0 != xh_elf_check_elfheader(base_addr)) continue;
