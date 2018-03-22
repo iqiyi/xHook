@@ -12,5 +12,7 @@
 #define XH_ERRNO_PROHIBITED 1009
 #define XH_ERRNO_NOTRUN     1010
 #define XH_ERRNO_RUNNING    1011
+#define XH_ERRNO_SEGVERR    1012
+#define XH_ERRNO_SEGVACC    1013
 
 #endif

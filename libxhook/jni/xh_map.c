@@ -118,10 +118,11 @@ static void xh_map_dump(xh_map_t *self)
 
 int xh_map_refresh(xh_map_t *self)
 {
-    char           line[1024];
+    char           line[512];
     FILE          *fp;
     uintptr_t      base_addr;
     char           perm[5];
+    unsigned long  offset;
     int            pathname_pos;
     char          *pathname;
     size_t         pathname_len;
@@ -141,10 +142,13 @@ int xh_map_refresh(xh_map_t *self)
     //start to refresh maps
     while(fgets(line, sizeof(line), fp))
     {
-        if(sscanf(line, "%"PRIxPTR"-%*lx %4s %*x %*x:%*x %*d%n", &base_addr, perm, &pathname_pos) != 2) continue;
+        if(sscanf(line, "%"PRIxPTR"-%*lx %4s %lx %*x:%*x %*d%n", &base_addr, perm, &offset, &pathname_pos) != 3) continue;
 
         //check permission
         if(perm[0] != 'r' || perm[2] != 'x' || perm[3] != 'p') continue;
+
+        //check offset
+        if(0 != offset) continue;
 
         //get and check pathname
         while(isspace(line[pathname_pos]) && pathname_pos < (int)(sizeof(line) - 1))
@@ -161,7 +165,7 @@ int xh_map_refresh(xh_map_t *self)
         if(0 == pathname_len) continue;        
         if('[' == pathname[0]) continue;
 
-        //check for app lib
+        //only for app lib?
         if(!(self->system_hook))
         {
             //ignore system lib
@@ -233,7 +237,7 @@ int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol,
     {
         //save the first error's number
         if(0 != r && 0 == ret) ret = r;
-            
+        
         if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_FAILED)) continue;
         if(XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_HOOKED)) continue;
 
@@ -242,6 +246,7 @@ int xh_map_hook(xh_map_t *self, const char *filename, const char *symbol,
             if(!XH_MAP_FLAG_CHECK(mi->flag, XH_MAP_FLAG_INITED))
             {
                 XH_MAP_FLAG_ADD(mi->flag, XH_MAP_FLAG_INITED);
+                
                 //init
                 if(0 != (r = xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname, self->reldyn_hook)))
                 {

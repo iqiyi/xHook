@@ -38,13 +38,6 @@ static inline ElfW(Word) elf_r_sym(ElfW(Word) info) { return ELF32_R_SYM(info); 
 static inline ElfW(Word) elf_r_type(ElfW(Word) info) { return ELF32_R_TYPE(info); }
 #endif
 
-#define PAGE_START(addr) ((addr) & PAGE_MASK)
-#define PAGE_END(addr)   (((addr) & PAGE_MASK) + PAGE_SIZE)
-
-#define PF_TO_PROT(v) ((((v) & PF_R) ? PROT_READ  : 0) | \
-                       (((v) & PF_W) ? PROT_WRITE : 0) | \
-                       (((v) & PF_X) ? PROT_EXEC  : 0))
-
 //iterator for plain PLT
 typedef struct
 {
@@ -406,75 +399,39 @@ static int xh_elf_find_symidx_by_name(xh_elf_t *self, const char *symbol, uint32
         return xh_elf_hash_lookup(self, symbol, symidx);
 }
 
-static int xh_elf_get_mem_access(xh_elf_t *self, ElfW(Addr) addr, uint32_t* prots)
-{
-    ElfW(Phdr) *phdr;
-    ElfW(Addr)  seg_page_start;
-    ElfW(Addr)  seg_page_end;
-    
-    for(phdr = self->phdr; phdr < self->phdr + self->ehdr->e_phnum; phdr++)
-    {
-        if(phdr->p_type == PT_LOAD)
-        {
-            seg_page_start = PAGE_START(self->bias_addr + phdr->p_vaddr);
-            seg_page_end   = PAGE_END(self->bias_addr + phdr->p_vaddr + phdr->p_memsz);
-            if (addr >= seg_page_start && addr < seg_page_end)
-            {
-                *prots = phdr->p_flags;
-                return 0;
-            }
-        }
-    }
-    
-    return XH_ERRNO_NOTFND;
-}
-
-static int xh_elf_set_mem_access(ElfW(Addr) addr, int prots)
-{
-    return mprotect((void *)PAGE_START(addr), PAGE_SIZE, PF_TO_PROT(prots));
-}
-
-static void xh_elf_clear_cache(ElfW(Addr) addr)
-{
-#if 0
-#if defined(__LP64__)
-    (void)addr;
-    return;
-#else
-    syscall(0xf0002, (void *)PAGE_START(addr), (void *)PAGE_END(addr));
-#endif
-#endif
-
-    //use gcc buildin func
-    __builtin___clear_cache((void *)PAGE_START(addr), (void *)PAGE_END(addr));
-}
-
 static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr) addr, void *new_func, void **old_func)
 {
-    void     *old_addr;
-    uint32_t  prots;
-    int       r;
+    void         *old_addr;
+    unsigned int  old_prot = 0;
+    unsigned int  new_prot = 0;
+    unsigned int  need_prot = PROT_READ | PROT_WRITE;
+    int           r;
 
     //already replaced?
+    //here we assume that we always have read permission, is this a problem?
     if(*(void **)addr == new_func) return 0;
 
-    //get old ports
-    if(0 != (r = xh_elf_get_mem_access(self, addr, &prots)))
+    //get old prot
+    if(0 != (r = xh_util_get_addr_protect(addr, self->pathname, &old_prot)))
     {
-        XH_LOG_ERROR("get mem access fails. ret: %d", r);
+        XH_LOG_ERROR("get addr prot failed. ret: %d", r);
         return r;
     }
 
-    //set new ports
-    prots |= PF_R;
-    prots |= PF_W;
-    //prots &= ~PF_X;
-    if(xh_elf_set_mem_access(addr, prots))
+    if(old_prot != need_prot)
     {
-        XH_LOG_ERROR("set mem access fails. errno: %d", errno);
-        return XH_ERRNO_UNKNOWN;
-    }
+        //set new prot
+        if(0 != (r = xh_util_set_addr_protect(addr, need_prot)))
+        {
+            XH_LOG_ERROR("set addr prot failed. ret: %d", r);
+            return r;
+        }
 
+        //check
+        if(0 != (r = xh_util_get_addr_protect(addr, self->pathname, &new_prot))) return r;
+        if(new_prot != need_prot) return XH_ERRNO_SEGVACC;
+    }
+    
     //save old func
     old_addr = *(void **)addr;
     if(NULL != old_func) *old_func = old_addr;
@@ -482,8 +439,17 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
     //replace func
     *(void **)addr = new_func;
 
-    //clear mmap cache
-    xh_elf_clear_cache(addr);
+    if(old_prot != need_prot)
+    {
+        //restore the old prot
+        if(0 != (r = xh_util_set_addr_protect(addr, old_prot)))
+        {
+            XH_LOG_WARN("restore addr prot failed. ret: %d", r);
+        }
+    }
+    
+    //clear cache
+    xh_util_flush_instruction_cache(addr);
 
     XH_LOG_INFO("XH_HK_OK %p: %p -> %p %s %s\n", (void *)addr, old_addr, new_func, symbol, self->pathname);
     return 0;
@@ -766,19 +732,35 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int r
     self->ehdr        = (ElfW(Ehdr) *)base_addr;
     self->phdr        = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
 
-    //find the first load-segment
+    //find the lowest load-segment
     ElfW(Phdr) *lhdr = xh_elf_get_lowest_segment_by_type(self, PT_LOAD);
+    if(NULL == lhdr)
+    {
+        XH_LOG_ERROR("Can NOT found load segment. %s", pathname);
+        return XH_ERRNO_FORMAT;
+    }
 
     //check first load-segment's offset
-    //"offset NOT 0" means we have to read ELF info from local file, not from memory
     if(0 != lhdr->p_offset)
     {
+        //this is an unusual situation
+        //this means we have to read ELF header info from file, NOT from memory
         XH_LOG_ERROR("first load-segment offset NOT 0 (offset: %p). %s",
                      (void *)(lhdr->p_offset), pathname);
         return XH_ERRNO_FORMAT;
     }
 
-    //save bias addr
+    //check first load-segment's vaddr
+    if(0 != lhdr->p_vaddr)
+    {
+        //this is an unusual situation
+        //just give up
+        XH_LOG_WARN("first load-segment vaddr NOT 0 (vaddr: %p). %s",
+                    (void *)(lhdr->p_offset), pathname);
+        return XH_ERRNO_FORMAT;
+    }
+
+    //save load bias addr
     self->bias_addr = self->base_addr - lhdr->p_vaddr;
     
     //find dynamic-segment
@@ -795,6 +777,18 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int r
     ElfW(Dyn) *dyn     = self->dyn;
     ElfW(Dyn) *dyn_end = self->dyn + (self->dyn_sz / sizeof(ElfW(Dyn)));
     uint32_t  *raw;
+    unsigned int prot = 0;
+    int r;
+    if(0 != (r = xh_util_get_mem_protect((uintptr_t)dyn, self->dyn_sz, pathname, &prot)))
+    {
+        XH_LOG_ERROR("get mem prot for dyn failed. %s. ret: %d", pathname, r);
+        return XH_ERRNO_FORMAT;
+    }
+    if(0 == (prot & PROT_READ))
+    {
+        XH_LOG_ERROR("check mem prot for dyn failed. %s", pathname);
+        return XH_ERRNO_FORMAT;
+    }
     for(; dyn < dyn_end; dyn++)
     {
         switch(dyn->d_tag)
@@ -906,7 +900,8 @@ void xh_elf_reset(xh_elf_t *self)
     memset(self, 0, sizeof(xh_elf_t));
 }
 
-static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section, const char *symbol,
+static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section,
+                                        int is_plt, const char *symbol,
                                         void *new_func, void **old_func,
                                         uint32_t symidx, void *rel_common,
                                         int *found)
@@ -935,20 +930,25 @@ static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section, con
         r_offset = rel->r_offset;
     }
 
+    //check sym
     r_sym = elf_r_sym(r_info);
+    if(r_sym != symidx) return 0;
+
+    //check type
     r_type = elf_r_type(r_info);
-                                           
-    if(r_sym == symidx &&
-       (r_type == R_GENERIC_JUMP_SLOT || r_type == R_GENERIC_GLOB_DAT || r_type == R_GENERIC_ABS))
+    if(is_plt && r_type != R_GENERIC_JUMP_SLOT) return 0;
+    if(!is_plt && (r_type != R_GENERIC_GLOB_DAT && r_type != R_GENERIC_ABS)) return 0;
+
+    //we found it
+    XH_LOG_INFO("found %s at %s offset: %p\n", symbol, section, (void *)r_offset);
+    if(NULL != found) *found = 1;
+
+    //do replace
+    addr = self->bias_addr + r_offset;
+    if(0 != (r = xh_elf_replace_function(self, symbol, addr, new_func, old_func)))
     {
-        XH_LOG_INFO("found %s at %s offset: %p\n", symbol, section, (void *)r_offset);
-        if(NULL != found) *found = 1;
-        addr = self->bias_addr + r_offset;
-        if(0 != (r = xh_elf_replace_function(self, symbol, addr, new_func, old_func)))
-        {
-            XH_LOG_ERROR("replace function failed: %s at %s\n", symbol, section);
-            return r;
-        }
+        XH_LOG_ERROR("replace function failed: %s at %s\n", symbol, section);
+        return r;
     }
 
     return 0;
@@ -983,7 +983,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
         while(NULL != (rel_common = xh_elf_plain_reloc_iterator_next(&plain_iter)))
         {
             if(0 != (r = xh_elf_find_and_replace_func(self,
-                                                      (self->is_use_rela ? ".rela.plt" : ".rel.plt"),
+                                                      (self->is_use_rela ? ".rela.plt" : ".rel.plt"), 1,
                                                       symbol, new_func, old_func,
                                                       symidx, rel_common, &found))) return r;
             if(found) break;
@@ -997,7 +997,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
         while(NULL != (rel_common = xh_elf_plain_reloc_iterator_next(&plain_iter)))
         {
             if(0 != (r = xh_elf_find_and_replace_func(self,
-                                                      (self->is_use_rela ? ".rela.dyn" : ".rel.dyn"),
+                                                      (self->is_use_rela ? ".rela.dyn" : ".rel.dyn"), 0,
                                                       symbol, new_func, old_func,
                                                       symidx, rel_common, NULL))) return r;
         }
@@ -1010,7 +1010,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
         while(NULL != (rel_common = xh_elf_packed_reloc_iterator_next(&packed_iter)))
         {
             if(0 != (r = xh_elf_find_and_replace_func(self,
-                                                      (self->is_use_rela ? ".rela.android" : ".rel.android"),
+                                                      (self->is_use_rela ? ".rela.android" : ".rel.android"), 0,
                                                       symbol, new_func, old_func,
                                                       symidx, rel_common, NULL))) return r;
         }
