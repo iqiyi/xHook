@@ -31,11 +31,11 @@
 #endif
 
 #if defined(__LP64__)
-static inline ElfW(Word) elf_r_sym(ElfW(Xword) info) { return ELF64_R_SYM(info); }
-static inline ElfW(Xword) elf_r_type(ElfW(Xword) info) { return ELF64_R_TYPE(info); }
+#define ELF_R_SYM(info) ELF64_R_SYM(info)
+#define ELF_R_TYPE(info) ELF64_R_TYPE(info)
 #else
-static inline ElfW(Word) elf_r_sym(ElfW(Word) info) { return ELF32_R_SYM(info); }
-static inline ElfW(Word) elf_r_type(ElfW(Word) info) { return ELF32_R_TYPE(info); }
+#define ELF_R_SYM(info) ELF32_R_SYM(info)
+#define ELF_R_TYPE(info) ELF32_R_TYPE(info)
 #endif
 
 //iterator for plain PLT
@@ -657,23 +657,23 @@ static void xh_elf_dump_rel(xh_elf_t *self, const char *type, ElfW(Addr) rel_add
     {
         if(self->is_use_rela)
         {
-            sym = &(self->symtab[elf_r_sym(rela[i].r_info)]);
+            sym = &(self->symtab[ELF_R_SYM(rela[i].r_info)]);
             XH_LOG_DEBUG(fmt,
                          rela[i].r_offset,
                          rela[i].r_info,
-                         elf_r_type(rela[i].r_info),
-                         elf_r_sym(rela[i].r_info),
+                         ELF_R_TYPE(rela[i].r_info),
+                         ELF_R_SYM(rela[i].r_info),
                          sym->st_value,
                          self->strtab + sym->st_name);
         }
         else
         {
-            sym = &(self->symtab[elf_r_sym(rel[i].r_info)]);
+            sym = &(self->symtab[ELF_R_SYM(rel[i].r_info)]);
             XH_LOG_DEBUG(fmt,
                          rel[i].r_offset,
                          rel[i].r_info,
-                         elf_r_type(rel[i].r_info),
-                         elf_r_sym(rel[i].r_info),
+                         ELF_R_TYPE(rel[i].r_info),
+                         ELF_R_SYM(rel[i].r_info),
                          sym->st_value,
                          self->strtab + sym->st_name);
         }
@@ -743,8 +743,9 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int r
     //check first load-segment's offset
     if(0 != lhdr->p_offset)
     {
-        //this is an unusual situation
+        //this is an unusual case
         //this means we have to read ELF header info from file, NOT from memory
+        //give up
         XH_LOG_ERROR("first load-segment offset NOT 0 (offset: %p). %s",
                      (void *)(lhdr->p_offset), pathname);
         return XH_ERRNO_FORMAT;
@@ -753,8 +754,8 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int r
     //check first load-segment's vaddr
     if(0 != lhdr->p_vaddr)
     {
-        //this is an unusual situation
-        //just give up
+        //this is an unusual case
+        //give up
         XH_LOG_WARN("first load-segment vaddr NOT 0 (vaddr: %p). %s",
                     (void *)(lhdr->p_offset), pathname);
         return XH_ERRNO_FORMAT;
@@ -931,11 +932,11 @@ static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section,
     }
 
     //check sym
-    r_sym = elf_r_sym(r_info);
+    r_sym = ELF_R_SYM(r_info);
     if(r_sym != symidx) return 0;
 
     //check type
-    r_type = elf_r_type(r_info);
+    r_type = ELF_R_TYPE(r_info);
     if(is_plt && r_type != R_GENERIC_JUMP_SLOT) return 0;
     if(!is_plt && (r_type != R_GENERIC_GLOB_DAT && r_type != R_GENERIC_ABS)) return 0;
 

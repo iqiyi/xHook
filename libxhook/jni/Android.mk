@@ -10,7 +10,7 @@ LOCAL_SRC_FILES  := xh_core.c \
                     xh_util.c \
                     xh_version.c
 LOCAL_C_INCLUDES := $(LOCAL_PATH)
-LOCAL_CFLAGS     := -Wall -Wextra -Werror
+LOCAL_CFLAGS     := -Wall -Wextra -Werror -fvisibility=hidden
 LOCAL_CONLYFLAGS := -std=c11
 LOCAL_LDLIBS     := -llog
 include $(BUILD_SHARED_LIBRARY)
