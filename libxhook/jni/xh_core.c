@@ -9,6 +9,7 @@
 #include "xh_log.h"
 #include "xh_map.h"
 #include "xh_core.h"
+#include "xh_elf.h"
 #include "xh_version.h"
 
 #define XH_CORE_DEBUG 0
@@ -273,6 +274,8 @@ int xh_core_start()
 
     pthread_mutex_lock(&xh_core_mutex);
     
+    xh_elf_init_sig_handler();
+    
     if(xh_core_running) goto end;
 
     //unavailable on Android 7.0+
@@ -324,6 +327,9 @@ int xh_core_stop()
 
     pthread_join(xh_core_refresh_tid, NULL);
     xh_map_destroy(&xh_core_maps);
+
+    xh_elf_uninit_sig_handler();
+
     return 0;
 }
 

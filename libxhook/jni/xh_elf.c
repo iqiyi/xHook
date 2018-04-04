@@ -5,6 +5,7 @@
 #include <link.h>
 #include <string.h>
 #include <errno.h>
+#include <setjmp.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -31,12 +32,40 @@
 #endif
 
 #if defined(__LP64__)
-#define ELF_R_SYM(info) ELF64_R_SYM(info)
+#define ELF_R_SYM(info)  ELF64_R_SYM(info)
 #define ELF_R_TYPE(info) ELF64_R_TYPE(info)
 #else
-#define ELF_R_SYM(info) ELF32_R_SYM(info)
+#define ELF_R_SYM(info)  ELF32_R_SYM(info)
 #define ELF_R_TYPE(info) ELF32_R_TYPE(info)
 #endif
+
+//signal handler for SIGSEGV
+static volatile int     xl_elf_segv_flag = 0;
+static sigjmp_buf       xl_elf_segv_env;
+static struct sigaction xl_elf_segv_sigact_old;
+static void xl_elf_segv_handler(int sig)
+{
+    (void)sig;
+    
+    if(xl_elf_segv_flag)
+        siglongjmp(xl_elf_segv_env, 1);
+    else
+        sigaction(SIGSEGV, &xl_elf_segv_sigact_old, NULL);
+}
+int xh_elf_init_sig_handler()
+{
+    struct sigaction act;
+    if(0 != sigemptyset(&act.sa_mask)) return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
+    act.sa_handler = xl_elf_segv_handler;
+    if(0 != sigaction(SIGSEGV, &act, &xl_elf_segv_sigact_old))
+        return (0 == errno ? XH_ERRNO_UNKNOWN : errno);    
+    return 0;
+}
+int xh_elf_uninit_sig_handler()
+{
+    sigaction(SIGSEGV, &xl_elf_segv_sigact_old, NULL);
+    return 0;
+}
 
 //iterator for plain PLT
 typedef struct
@@ -403,7 +432,7 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
 {
     void         *old_addr;
     unsigned int  old_prot = 0;
-    unsigned int  new_prot = 0;
+    //unsigned int  new_prot = 0;
     unsigned int  need_prot = PROT_READ | PROT_WRITE;
     int           r;
 
@@ -428,8 +457,8 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
         }
 
         //check
-        if(0 != (r = xh_util_get_addr_protect(addr, self->pathname, &new_prot))) return r;
-        if(new_prot != need_prot) return XH_ERRNO_SEGVACC;
+        //if(0 != (r = xh_util_get_addr_protect(addr, self->pathname, &new_prot))) return r;
+        //if(new_prot != need_prot) return XH_ERRNO_SEGVACC;
     }
     
     //save old func
@@ -437,7 +466,21 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
     if(NULL != old_func) *old_func = old_addr;
 
     //replace func
-    *(void **)addr = new_func;
+    //
+    //We have tried our best to ensure that the address has write permission.
+    //But as a result, there are still about 3/100000 crash rate caused by
+    //this write operation. (sig: SIGSEGV, code: SEGV_ACCERR)
+    //This is a clear and harmless crash point, so we just do a try-catch here.
+    if(0 == sigsetjmp(xl_elf_segv_env, 1))
+    {
+        xl_elf_segv_flag = 1;
+        *(void **)addr = new_func; //do the dangerous operation
+    }
+    else
+    {
+        XH_LOG_WARN("SIGSEGV catched when replace for %s, %s", self->pathname, symbol);
+    }
+    xl_elf_segv_flag = 0;
 
     if(old_prot != need_prot)
     {

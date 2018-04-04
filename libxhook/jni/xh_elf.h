@@ -58,6 +58,9 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
 
 int xh_elf_check_elfheader(uintptr_t base_addr);
 
+int xh_elf_init_sig_handler();
+int xh_elf_uninit_sig_handler();
+
 #ifdef __cplusplus
 }
 #endif
