@@ -14,15 +14,9 @@ public class NativeHandler {
     private NativeHandler() {
     }
 
-    public native int start();
-
-    public native int stop();
-
-    public native int refresh();
+    public native int refresh(boolean async);
 
     public native void enableDebug(boolean flag);
 
-    public native void enableSystemHook(boolean flag);
-
-    public native void enableReldynHook(boolean flag);
+    public native void clear();
 }

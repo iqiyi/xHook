@@ -19,14 +19,12 @@ public class MainActivity extends AppCompatActivity {
         if(!com.qiyi.xhook.XHook.getInstance().isInited()) {
             return;
         }
-        com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
-        //com.qiyi.xhook.XHook.getInstance().enableSystemHook(true); //default is false
-        com.qiyi.xhook.XHook.getInstance().enableReldynHook(true); //default is false
+        //com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
 
         //init your biz lib
         com.qiyi.biz.Biz.getInstance().init();
 
-        //target lib running
+        //target lib run
         com.qiyi.test.Test.getInstance().start();
 
         //for debug, get a chance to the target lib to run before hooked
@@ -40,16 +38,17 @@ public class MainActivity extends AppCompatActivity {
         //register hook points
         com.qiyi.biz.Biz.getInstance().start();
 
-        //do start (and hook)
-        com.qiyi.xhook.XHook.getInstance().start();
+        //do refresh
+        com.qiyi.xhook.XHook.getInstance().refresh(true);
 
-        //do refresh for some reason, maybe called after some System.loadLibrary()
+        //do refresh for some reason, maybe called after some System.loadLibrary() and System.load()
+        //*
         new Thread(new Runnable() {
             @Override
             public void run() {
                 while(true)
                 {
-                    com.qiyi.xhook.XHook.getInstance().refresh();
+                    com.qiyi.xhook.XHook.getInstance().refresh(true);
 
                     try {
                         Thread.sleep(5000);
@@ -59,5 +58,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }).start();
+        //*/
     }
 }

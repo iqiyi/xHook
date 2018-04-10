@@ -52,6 +52,24 @@ public class XHook {
     }
 
     /**
+     * Re-hook after System.loadLibrary() and System.load().
+     * @param async true if to refresh in async mode; otherwise, refresh in sync mode.
+     * @return 0 if successful, false otherwise.
+     */
+    public synchronized void refresh(boolean async) {
+        if(!inited) {
+            return;
+        }
+
+        try {
+            com.qiyi.xhook.NativeHandler.getInstance().refresh(async);
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+            Log.e("xhook", "xhook native refresh failed");
+        }
+    }
+
+    /**
      * Enable/disable the debug log to logcat. (default is: disable)
      * @param flag the bool flag.
      */
@@ -69,96 +87,19 @@ public class XHook {
     }
 
     /**
-     * Enable/disable hook System library. (default is: disable)
-     * @param flag the bool flag.
+     * Clear all cache.
      */
-    public synchronized void enableSystemHook(boolean flag) {
+    public synchronized void clear() {
         if(!inited) {
             return;
         }
 
         try {
-            com.qiyi.xhook.NativeHandler.getInstance().enableSystemHook(flag);
+            com.qiyi.xhook.NativeHandler.getInstance().clear();
         } catch (Throwable ex) {
             ex.printStackTrace();
-            Log.e("xhook", "xhook native enableSystemHook failed");
+            Log.e("xhook", "xhook native clear failed");
         }
     }
 
-    /**
-     * Enable/disable hook .rel.dyn and .rel.android. (default is: disable)
-     * @param flag the bool flag.
-     */
-    public synchronized void enableReldynHook(boolean flag) {
-        if(!inited) {
-            return;
-        }
-
-        try {
-            com.qiyi.xhook.NativeHandler.getInstance().enableReldynHook(flag);
-        } catch (Throwable ex) {
-            ex.printStackTrace();
-            Log.e("xhook", "xhook native enableReldynHook failed");
-        }
-    }
-
-    /**
-     * Start the hook mechanism.
-     * @return 0 if successful, false otherwise.
-     */
-    public synchronized int start() {
-        if(!inited) {
-            return 10000;
-        }
-
-        int ret;
-        try {
-            ret = com.qiyi.xhook.NativeHandler.getInstance().start();
-        } catch (Throwable ex) {
-            ex.printStackTrace();
-            Log.e("xhook", "xhook native start failed");
-            ret = 10001;
-        }
-        return ret;
-    }
-
-    /**
-     * Stop the hook mechanism.
-     * @return 0 if successful, false otherwise.
-     */
-    public synchronized int stop() {
-        if(!inited) {
-            return 10000;
-        }
-
-        int ret;
-        try {
-            ret = com.qiyi.xhook.NativeHandler.getInstance().stop();
-        } catch (Throwable ex) {
-            ex.printStackTrace();
-            Log.e("xhook", "xhook native stop failed");
-            ret = 10001;
-        }
-        return ret;
-    }
-
-    /**
-     * Re-hook after System.loadLibrary() and System.load().
-     * @return 0 if successful, false otherwise.
-     */
-    public synchronized int refresh() {
-        if(!inited) {
-            return 10000;
-        }
-
-        int ret;
-        try {
-            ret = com.qiyi.xhook.NativeHandler.getInstance().refresh();
-        } catch (Throwable ex) {
-            ex.printStackTrace();
-            Log.e("xhook", "xhook native refresh failed");
-            ret = 10001;
-        }
-        return ret;
-    }
 }
