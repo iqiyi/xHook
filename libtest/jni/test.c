@@ -9,16 +9,16 @@ my_log_t my_global_log_ptr = (my_log_t)__android_log_print;
 static void *new_thread_func(void *arg)
 {
     (void)arg;
-    my_log_t my_local_log_ptr = (my_log_t)__android_log_print;
+    my_log_t my_local_log_ptr2 = (my_log_t)__android_log_print;
     unsigned int i = 0;
     
     while(1)
     {
-        my_log_t my_local_log_ptr2 = (my_log_t)__android_log_print;
+        my_log_t my_local_log_ptr = (my_log_t)__android_log_print;
         __android_log_print(ANDROID_LOG_DEBUG, "mytest", "call directly. %u\n", i);
         my_global_log_ptr(ANDROID_LOG_DEBUG, "mytest", "call from global ptr. %u\n", i);
-        my_local_log_ptr(ANDROID_LOG_DEBUG, "mytest", "call from local ptr. %u (hooking maybe failed)\n", i);
-        my_local_log_ptr2(ANDROID_LOG_DEBUG, "mytest", "call from local ptr2. %u\n", i);
+        my_local_log_ptr(ANDROID_LOG_DEBUG, "mytest", "call from local ptr. %u\n", i);
+        my_local_log_ptr2(ANDROID_LOG_DEBUG, "mytest", "call from local ptr2. %u (definitely failed when compiled with -O0)\n", i);
         i++;
         sleep(1);
     }

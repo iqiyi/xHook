@@ -43,6 +43,7 @@
 static volatile int     xl_elf_segv_flag = 0;
 static sigjmp_buf       xl_elf_segv_env;
 static struct sigaction xl_elf_segv_sigact_old;
+
 static void xl_elf_segv_handler(int sig)
 {
     (void)sig;
@@ -52,19 +53,23 @@ static void xl_elf_segv_handler(int sig)
     else
         sigaction(SIGSEGV, &xl_elf_segv_sigact_old, NULL);
 }
+
 int xh_elf_init_sig_handler()
 {
     struct sigaction act;
+    
     if(0 != sigemptyset(&act.sa_mask)) return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
     act.sa_handler = xl_elf_segv_handler;
+    
     if(0 != sigaction(SIGSEGV, &act, &xl_elf_segv_sigact_old))
-        return (0 == errno ? XH_ERRNO_UNKNOWN : errno);    
+        return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
+
     return 0;
 }
-int xh_elf_uninit_sig_handler()
+
+void xh_elf_uninit_sig_handler()
 {
     sigaction(SIGSEGV, &xl_elf_segv_sigact_old, NULL);
-    return 0;
 }
 
 //iterator for plain PLT
@@ -468,12 +473,12 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
     //replace func
     //
     //We have tried our best to ensure that the address has write permission.
-    //But as a result, there are still about 3/100000 crash rate caused by
+    //But as a result, there are still about 3/100000 app crash rates caused by
     //this write operation. (sig: SIGSEGV, code: SEGV_ACCERR)
-    //This is a clear and harmless crash point, so we just do a try-catch here.
+    //This is a clear and harmless crash point, so we just add a try-catch here.
+    xl_elf_segv_flag = 1;
     if(0 == sigsetjmp(xl_elf_segv_env, 1))
     {
-        xl_elf_segv_flag = 1;
         *(void **)addr = new_func; //do the dangerous operation
     }
     else
@@ -764,48 +769,48 @@ static void xh_elf_dump(xh_elf_t *self)
 
 #endif
 
-int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int reldyn_hook)
+int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
 {
     if(NULL != self->pathname) return 0; //inited?
 
     if(NULL == pathname) return XH_ERRNO_INVAL;
 
-    self->reldyn_hook = reldyn_hook;
-    self->base_addr   = (ElfW(Addr))base_addr;
-    self->ehdr        = (ElfW(Ehdr) *)base_addr;
-    self->phdr        = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
+    self->base_addr = (ElfW(Addr))base_addr;
+    self->ehdr      = (ElfW(Ehdr) *)base_addr;
+    self->phdr      = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
 
     //find the lowest load-segment
-    ElfW(Phdr) *lhdr = xh_elf_get_lowest_segment_by_type(self, PT_LOAD);
-    if(NULL == lhdr)
+    ElfW(Phdr) *lhdr_0 = xh_elf_get_lowest_segment_by_type(self, PT_LOAD);
+    if(NULL == lhdr_0)
     {
         XH_LOG_ERROR("Can NOT found load segment. %s", pathname);
         return XH_ERRNO_FORMAT;
     }
 
     //check first load-segment's offset
-    if(0 != lhdr->p_offset)
+    if(0 != lhdr_0->p_offset)
     {
         //this is an unusual case
         //this means we have to read ELF header info from file, NOT from memory
         //give up
         XH_LOG_ERROR("first load-segment offset NOT 0 (offset: %p). %s",
-                     (void *)(lhdr->p_offset), pathname);
+                     (void *)(lhdr_0->p_offset), pathname);
         return XH_ERRNO_FORMAT;
     }
 
+#if XH_ELF_DEBUG
     //check first load-segment's vaddr
-    if(0 != lhdr->p_vaddr)
+    if(0 != lhdr_0->p_vaddr)
     {
         //this is an unusual case
-        //give up
-        XH_LOG_WARN("first load-segment vaddr NOT 0 (vaddr: %p). %s",
-                    (void *)(lhdr->p_offset), pathname);
-        return XH_ERRNO_FORMAT;
+        //be careful
+        XH_LOG_INFO("first load-segment vaddr NOT 0 (vaddr: %p). %s",
+                    (void *)(lhdr_0->p_vaddr), pathname);
     }
+#endif
 
     //save load bias addr
-    self->bias_addr = self->base_addr - lhdr->p_vaddr;
+    self->bias_addr = self->base_addr - lhdr_0->p_vaddr;
     
     //find dynamic-segment
     ElfW(Phdr) *dhdr = xh_elf_get_lowest_segment_by_type(self, PT_DYNAMIC);
@@ -830,6 +835,8 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname, int r
     }
     if(0 == (prot & PROT_READ))
     {
+        //In principle, we do NOT need to do this.
+        //In practice, this check avoids about 1/100000 app crash rates caused by: "dyn->d_tag".
         XH_LOG_ERROR("check mem prot for dyn failed. %s", pathname);
         return XH_ERRNO_FORMAT;
     }
@@ -1035,7 +1042,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
     }
 
     //replace for .rel(a).dyn
-    if(0 != self->reldyn && self->reldyn_hook)
+    if(0 != self->reldyn)
     {
         xh_elf_plain_reloc_iterator_init(&plain_iter, self->reldyn, self->reldyn_sz, self->is_use_rela);
         while(NULL != (rel_common = xh_elf_plain_reloc_iterator_next(&plain_iter)))
@@ -1048,7 +1055,7 @@ int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_f
     }
 
     //replace for .rel(a).android
-    if(0 != self->relandroid && self->reldyn_hook)
+    if(0 != self->relandroid)
     {
         xh_elf_packed_reloc_iterator_init(&packed_iter, self->relandroid, self->relandroid_sz, self->is_use_rela);
         while(NULL != (rel_common = xh_elf_packed_reloc_iterator_next(&packed_iter)))

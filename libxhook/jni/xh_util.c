@@ -93,15 +93,5 @@ int xh_util_set_addr_protect(uintptr_t addr, unsigned int prot)
 
 void xh_util_flush_instruction_cache(uintptr_t addr)
 {
-#if 0
-#if defined(__LP64__)
-    (void)addr;
-    return;
-#else
-    syscall(0xf0002, (void *)PAGE_START(addr), (void *)PAGE_END(addr));
-#endif
-#endif
-
-    //use gcc buildin func
     __builtin___clear_cache((void *)PAGE_START(addr), (void *)PAGE_END(addr));
 }

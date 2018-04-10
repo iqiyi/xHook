@@ -1,391 +1,396 @@
 #include <inttypes.h>
 #include <stdint.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include <jni.h>
+#include <regex.h>
+#include "xh_queue.h"
 #include "xh_tree.h"
 #include "xh_errno.h"
 #include "xh_log.h"
-#include "xh_map.h"
-#include "xh_core.h"
 #include "xh_elf.h"
 #include "xh_version.h"
+#include "xh_core.h"
 
 #define XH_CORE_DEBUG 0
 
-//filename -> new_func, old_func
-typedef struct xh_core_filename
+//registered hook point's info collection
+typedef struct xh_core_hook_info
 {
-    const char  *filename;
-    void        *new_func;
-    void       **old_func;
-    RB_ENTRY(xh_core_filename) link;
-} xh_core_filename_t;
-static __inline__ int xh_core_filename_cmp(xh_core_filename_t *a, xh_core_filename_t *b)
+#if XH_CORE_DEBUG
+    char     *pathname_regex_str;
+#endif
+    regex_t   pathname_regex;
+    char     *symbol;
+    void     *new_func;
+    void    **old_func;
+    TAILQ_ENTRY(xh_core_hook_info,) link;
+} xh_core_hook_info_t;
+typedef TAILQ_HEAD(xh_core_hook_info_queue, xh_core_hook_info,) xh_core_hook_info_queue_t;
+
+//required info from /proc/self/maps
+typedef struct xh_core_map_info
 {
-    if(NULL == a->filename && NULL == b->filename)
-        return 0;
-    else if(NULL != a->filename && NULL == b->filename)
-        return 1;
-    else if(NULL == a->filename && NULL != b->filename)
-        return -1;
-    else
-        return strcmp(a->filename, b->filename);
+    char      *pathname;
+    uintptr_t  base_addr;
+    xh_elf_t   elf;
+    RB_ENTRY(xh_core_map_info) link;
+} xh_core_map_info_t;
+static __inline__ int xh_core_map_info_cmp(xh_core_map_info_t *a, xh_core_map_info_t *b)
+{
+    return strcmp(a->pathname, b->pathname);
 }
-typedef RB_HEAD(xh_core_filename_tree, xh_core_filename) xh_core_filename_tree_t;
-RB_GENERATE_STATIC(xh_core_filename_tree, xh_core_filename, link, xh_core_filename_cmp)
+typedef RB_HEAD(xh_core_map_info_tree, xh_core_map_info) xh_core_map_info_tree_t;
+RB_GENERATE_STATIC(xh_core_map_info_tree, xh_core_map_info, link, xh_core_map_info_cmp)
 
-//symbol -> filename(s)
-typedef struct xh_core_symbol
+
+static xh_core_hook_info_queue_t xh_core_hook_info = TAILQ_HEAD_INITIALIZER(xh_core_hook_info);
+static xh_core_map_info_tree_t   xh_core_map_info  = RB_INITIALIZER(&xh_core_map_info);
+static pthread_mutex_t           xh_core_mutex     = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t            xh_core_cond      = PTHREAD_COND_INITIALIZER;
+static volatile int              xh_core_inited    = 0;
+static volatile int              xh_core_init_ok   = 0;
+static volatile int              xh_core_async_inited  = 0;
+static volatile int              xh_core_async_init_ok = 0;
+static pthread_mutex_t           xh_core_refresh_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t                 xh_core_refresh_thread_tid;
+static volatile int              xh_core_refresh_thread_running = 0;
+static volatile int              xh_core_refresh_thread_do = 0;
+
+
+int xh_core_register(const char *pathname_regex_str, const char *symbol,
+                     void *new_func, void **old_func)
 {
-    const char              *symbol;
-    xh_core_filename_tree_t  filenames;
-    int                      have_wildcard;
-    RB_ENTRY(xh_core_symbol) link;
-} xh_core_symbol_t;
-static __inline__ int xh_core_symbol_cmp(xh_core_symbol_t *a, xh_core_symbol_t *b)
-{
-    return strcmp(a->symbol, b->symbol);
-}
-typedef RB_HEAD(xh_core_symbol_tree, xh_core_symbol) xh_core_symbol_tree_t;
-RB_GENERATE_STATIC(xh_core_symbol_tree, xh_core_symbol, link, xh_core_symbol_cmp)
-
-static xh_core_symbol_tree_t  xh_core_symbols      = RB_INITIALIZER(NULL);
-static xh_map_t              *xh_core_maps         = NULL;
-static pthread_mutex_t        xh_core_mutex        = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t         xh_core_cond         = PTHREAD_COND_INITIALIZER;
-static pthread_t              xh_core_refresh_tid;
-static volatile int           xh_core_running      = 0;
-static volatile int           xh_core_refresh_need = 0;
-static int                    xh_core_system_hook  = 0;
-static int                    xh_core_reldyn_hook  = 0;
-
-void xh_core_set_log_priority(android_LogPriority priority)
-{
-    xh_log_priority = priority;
-}
-
-void xh_core_set_system_hook(int flag)
-{
-    xh_core_system_hook = flag;
-}
-
-void xh_core_set_reldyn_hook(int flag)
-{
-    xh_core_reldyn_hook = flag;
-}
-
-static int xh_core_hook_impl(const char *filename, const char *symbol, void *new_func, void **old_func)
-{
-    xh_core_symbol_t    sym_key  = {.symbol = symbol};
-    xh_core_symbol_t   *sym      = NULL;
-    xh_core_filename_t  file_key = {.filename = filename};
-    xh_core_filename_t *file     = NULL;
-
-    //find or create symbol info node
-    sym = RB_FIND(xh_core_symbol_tree, &xh_core_symbols, &sym_key);
-    if(NULL == sym)
-    {
-        //new symbol info
-        if(NULL == (sym = malloc(sizeof(xh_core_symbol_t)))) return XH_ERRNO_NOMEM;
-        if(NULL == (sym->symbol = strdup(symbol)))
-        {
-            free(sym);
-            return XH_ERRNO_NOMEM;
-        }
-        RB_INIT(&(sym->filenames));
-
-        //insert symbol info into tree
-        RB_INSERT(xh_core_symbol_tree, &xh_core_symbols, sym);
-    }
-
-    //find or create filename info node
-    file = RB_FIND(xh_core_filename_tree, &(sym->filenames), &file_key);
-    if(NULL == file)
-    {
-        //new filename info
-        if(NULL == (file = malloc(sizeof(xh_core_filename_t)))) return XH_ERRNO_NOMEM;
-        if(NULL != filename)
-        {
-            if(NULL == (file->filename = strdup(filename)))
-            {
-                free(file);
-                return XH_ERRNO_NOMEM;
-            }
-        }
-        else
-        {
-            file->filename = NULL;
-        }
-        
-        //insert filename info into symbol info
-        RB_INSERT(xh_core_filename_tree, &(sym->filenames), file);
-    }
-
-    //update the filename info
-    file->new_func = new_func;
-    file->old_func = old_func;
+    xh_core_hook_info_t *hi;
+    regex_t              regex;
     
+    if(NULL == pathname_regex_str || NULL == symbol || NULL == new_func) return XH_ERRNO_INVAL;
+
+    if(0 != regcomp(&regex, pathname_regex_str, 0)) return XH_ERRNO_INVAL;
+
+    if(NULL == (hi = malloc(sizeof(xh_core_hook_info_t)))) return XH_ERRNO_NOMEM;
+    if(NULL == (hi->symbol = strdup(symbol)))
+    {
+        free(hi);
+        return XH_ERRNO_NOMEM;
+    }
+#if XH_CORE_DEBUG
+    if(NULL == (hi->pathname_regex_str = strdup(pathname_regex_str)))
+    {
+        free(hi->symbol);
+        free(hi);
+        return XH_ERRNO_NOMEM;
+    }
+#endif
+    hi->pathname_regex = regex;
+    hi->new_func = new_func;
+    hi->old_func = old_func;
+    
+    pthread_mutex_lock(&xh_core_mutex);
+    TAILQ_INSERT_TAIL(&xh_core_hook_info, hi, link);
+    pthread_mutex_unlock(&xh_core_mutex);
+
     return 0;
 }
 
-int xh_core_hook(const char *filename, const char *symbol, void *new_func, void **old_func)
+static void xh_core_hook(xh_core_map_info_t *mi)
 {
-    int r;
-    
-    if(NULL == symbol || NULL == new_func) return XH_ERRNO_INVAL;
-    
-    if(xh_core_running) return XH_ERRNO_RUNNING;
-    
-    pthread_mutex_lock(&xh_core_mutex);
-    r = xh_core_hook_impl(filename, symbol, new_func, old_func);
-    pthread_mutex_unlock(&xh_core_mutex);
-    return r;
-}
+    //init
+    xh_elf_reset(&(mi->elf));
+    if(0 != xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname)) return;
 
-int xh_core_unhook(const char *filename, const char *symbol)
-{
-    int r;
-    
-    if(NULL == filename || NULL == symbol) return XH_ERRNO_INVAL;
-    
-    if(xh_core_running) return XH_ERRNO_RUNNING;
-
-    pthread_mutex_lock(&xh_core_mutex);
-    r = xh_core_hook_impl(filename, symbol, NULL, NULL);
-    pthread_mutex_unlock(&xh_core_mutex);
-    return r;
-}
-
-#if XH_CORE_DEBUG
-static void xh_core_dump()
-{
-    xh_core_symbol_t   *sym;
-    xh_core_filename_t *file;
-
-    XH_LOG_DEBUG("Stat:\n");
-    RB_FOREACH(sym, xh_core_symbol_tree, &xh_core_symbols)
+    //hook
+    xh_core_hook_info_t *hi;
+    TAILQ_FOREACH(hi, &xh_core_hook_info, link)
     {
-        RB_FOREACH(file, xh_core_filename_tree, &(sym->filenames))
+        if(0 == regexec(&(hi->pathname_regex), mi->pathname, 0, NULL, 0))
         {
-            XH_LOG_INFO("  %s : %s : %p -> %p\n",
-                        sym->symbol,
-                        (NULL == file->filename ? "*" : file->filename),
-                        (file->old_func ? *(file->old_func) : 0),
-                        file->new_func);
+            xh_elf_hook(&(mi->elf), hi->symbol, hi->new_func, hi->old_func);
         }
-    }
-}
-#endif
-
-static int xh_core_need_hook_check(const char *pathname, const char *filename, void *arg)
-{
-    xh_core_symbol_t   *sym = (xh_core_symbol_t *)arg;;
-    xh_core_filename_t *file;
-
-    if(NULL != filename) //not wildcard
-    {
-        //check for filename match
-        if(NULL == strstr(pathname, filename)) return 0;
-
-        //check for unhook info (new_func == NULL)
-        RB_FOREACH(file, xh_core_filename_tree, &(sym->filenames))
-        {
-            if(NULL == file->new_func &&
-               NULL != file->filename &&
-               NULL != strstr(pathname, file->filename))
-                return 0;
-        }
-        
-        return 1;
-    }
-    else //wildcard
-    {
-        //check for special filename's hook or unhook info
-        RB_FOREACH(file, xh_core_filename_tree, &(sym->filenames))
-        {
-            if(NULL != file->filename &&
-               NULL != strstr(pathname, file->filename))
-                return 0;
-        }
-        
-        return 1;
     }
 }
 
 static void xh_core_refresh_impl()
 {
-    xh_core_symbol_t   *sym;
-    xh_core_filename_t *file;
+    char                     line[512];
+    FILE                    *fp;
+    uintptr_t                base_addr;
+    char                     perm[5];
+    unsigned long            offset;
+    int                      pathname_pos;
+    char                    *pathname;
+    size_t                   pathname_len;
+    xh_core_map_info_t      *mi, *mi_tmp;
+    xh_core_map_info_t       mi_key;
+    xh_core_hook_info_t     *hi;
+    int                      found;
+    xh_core_map_info_tree_t  map_info_refreshed = RB_INITIALIZER(&map_info_refreshed);
 
-    if(0 != xh_map_refresh(xh_core_maps)) return;
-
-    RB_FOREACH(sym, xh_core_symbol_tree, &xh_core_symbols)
+    if(NULL == (fp = fopen("/proc/self/maps", "r")))
     {
-        RB_FOREACH(file, xh_core_filename_tree, &(sym->filenames))
+        XH_LOG_ERROR("fopen /proc/self/maps failed");
+        return;
+    }
+
+    while(fgets(line, sizeof(line), fp))
+    {
+        if(sscanf(line, "%"PRIxPTR"-%*lx %4s %lx %*x:%*x %*d%n", &base_addr, perm, &offset, &pathname_pos) != 3) continue;
+
+        //check permission
+        if(perm[0] != 'r' || perm[2] != 'x' || perm[3] != 'p') continue;
+
+        //check offset
+        if(0 != offset)
         {
-            if(NULL != file->new_func)
+#if XH_CORE_DEBUG
+            XH_LOG_INFO("offset in maps NOT 0: %s", line);
+#endif
+            continue;
+        }
+
+        //get pathname
+        while(isspace(line[pathname_pos]) && pathname_pos < (int)(sizeof(line) - 1))
+            pathname_pos += 1;
+        if(pathname_pos >= (int)(sizeof(line) - 1)) continue;
+        pathname = line + pathname_pos;
+        pathname_len = strlen(pathname);
+        if(0 == pathname_len) continue;
+        if(pathname[pathname_len - 1] == '\n')
+        {
+            pathname[pathname_len - 1] = '\0';
+            pathname_len -= 1;
+        }
+        if(0 == pathname_len) continue;
+        if('[' == pathname[0]) continue;
+
+        //check if we need to hook this elf
+        found = 0;
+        TAILQ_FOREACH(hi, &xh_core_hook_info, link)
+        {
+            if(0 == regexec(&(hi->pathname_regex), pathname, 0, NULL, 0))
             {
-                xh_map_hook(xh_core_maps, file->filename, sym->symbol,
-                            file->new_func, file->old_func,
-                            xh_core_need_hook_check, (void *)sym);
+                found = 1;
+                break;
             }
         }
+        if(0 == found) continue;
+
+        //check elf header format
+        if(0 != xh_elf_check_elfheader(base_addr)) continue;
+        
+        //check existed map item
+        mi_key.pathname = pathname;
+        if(NULL != (mi = RB_FIND(xh_core_map_info_tree, &xh_core_map_info, &mi_key)))
+        {
+            //exist
+            if(mi->base_addr != base_addr)
+            {
+                //base_addr changed
+                mi->base_addr = base_addr; //save the new base_addr
+                xh_core_hook(mi); //re-hook
+            }
+            RB_REMOVE(xh_core_map_info_tree, &xh_core_map_info, mi);
+            RB_INSERT(xh_core_map_info_tree, &map_info_refreshed, mi);
+        }
+        else
+        {
+            //not exist, this is a new map item
+            if(NULL == (mi = (xh_core_map_info_t *)malloc(sizeof(xh_core_map_info_t)))) continue;
+            if(NULL == (mi->pathname = strdup(pathname)))
+            {
+                free(mi);
+                continue;
+            }
+            mi->base_addr = base_addr;
+            xh_core_hook(mi); //hook
+            RB_INSERT(xh_core_map_info_tree, &map_info_refreshed, mi);
+        }
     }
+    fclose(fp);
+
+    //free all missing map item, maybe dlclosed?
+    RB_FOREACH_SAFE(mi, xh_core_map_info_tree, &xh_core_map_info, mi_tmp)
+    {
+        RB_REMOVE(xh_core_map_info_tree, &xh_core_map_info, mi);
+        if(mi->pathname) free(mi->pathname);
+        free(mi);
+    }
+
+    //save the new refreshed map info tree
+    xh_core_map_info = map_info_refreshed;
+
+    XH_LOG_INFO("map refreshed");
     
-    xh_map_hook_finish(xh_core_maps);
+#if XH_CORE_DEBUG
+    RB_FOREACH(mi, xh_core_map_info_tree, &xh_core_map_info)
+        XH_LOG_DEBUG("  %"PRIxPTR" %s\n", mi->base_addr, mi->pathname);
+#endif
 }
 
-static void *xh_core_refresh_loop_func(void *arg)
+static void *xh_core_refresh_thread_func(void *arg)
 {
     (void)arg;
     
-    pthread_setname_np(xh_core_refresh_tid, "xh_refresh_loop");
+    pthread_setname_np(pthread_self(), "xh_refresh_loop");
 
-    while(xh_core_running)
+    while(xh_core_refresh_thread_running)
     {
         //waiting for a refresh task or exit
         pthread_mutex_lock(&xh_core_mutex);
-        while(!xh_core_refresh_need && xh_core_running)
+        while(!xh_core_refresh_thread_do && xh_core_refresh_thread_running)
         {
             pthread_cond_wait(&xh_core_cond, &xh_core_mutex);
         }
-        if(!xh_core_running)
+        if(!xh_core_refresh_thread_running)
         {
             pthread_mutex_unlock(&xh_core_mutex);
             break;
         }
-        xh_core_refresh_need = 0;
+        xh_core_refresh_thread_do = 0;
         pthread_mutex_unlock(&xh_core_mutex);
 
-        //do refresh
+        //refresh
+        pthread_mutex_lock(&xh_core_refresh_mutex);
         xh_core_refresh_impl();
+        pthread_mutex_unlock(&xh_core_refresh_mutex);
     }
 
     return NULL;
 }
 
-int xh_core_start()
+static void xh_core_init_once()
 {
-    int r = 0;
-    
-    if(xh_core_running) return 0;
+    if(xh_core_inited) return;
 
     pthread_mutex_lock(&xh_core_mutex);
+
+    if(xh_core_inited) goto end;
+
+    xh_core_inited = 1;
     
-    xh_elf_init_sig_handler();
+    //dump debug info
+    XH_LOG_INFO("%s\n", xh_version_str_full());
+#if XH_CORE_DEBUG
+    xh_core_hook_info_t *hi;
+    TAILQ_FOREACH(hi, &xh_core_hook_info, link)
+        XH_LOG_INFO("  %s @ %s : %p, %p\n", hi->symbol, hi->pathname_regex_str,
+                    hi->new_func, hi->old_func);
+#endif
     
-    if(xh_core_running) goto end;
-
-    //unavailable on Android 7.0+
-    //register dlopen() and android_dlopen_ext() hooks for auto-refresh
-    //xh_core_hook_dl();
-
-    //create map
-    if(0 != (r = xh_map_create(&xh_core_maps, xh_core_system_hook, xh_core_reldyn_hook))) goto end;
-
-    //start refresh loop func
-    xh_core_running = 1;
-    if(0 != (r = pthread_create(&xh_core_refresh_tid, NULL, &xh_core_refresh_loop_func, NULL))) goto end;
-
-    //do the first refresh
-    xh_core_refresh_need = 1;
-    pthread_cond_signal(&xh_core_cond);
+    //register signal handler
+    if(0 != xh_elf_init_sig_handler()) goto end;
 
     //OK
-    XH_LOG_INFO("%s\n", xh_version_str_full());
-    r = 0;
+    xh_core_init_ok = 1;
+
+ end:
+    pthread_mutex_unlock(&xh_core_mutex);
+}
+
+static void xh_core_init_async_once()
+{
+    if(xh_core_async_inited) return;
     
-#if XH_CORE_DEBUG
-    xh_core_dump();
-#endif
+    pthread_mutex_lock(&xh_core_mutex);
+    
+    if(xh_core_async_inited) goto end;
+
+    xh_core_async_inited = 1;
+    
+    //create async refresh thread
+    xh_core_refresh_thread_running = 1;
+    if(0 != pthread_create(&xh_core_refresh_thread_tid, NULL, &xh_core_refresh_thread_func, NULL))
+    {
+        xh_core_refresh_thread_running = 0;
+        goto end;
+    }
+
+    //OK
+    xh_core_async_init_ok = 1;
     
  end:
-    
-    //something failed
-    if(0 != r)
-    {
-        xh_core_running = 0;
-        if(NULL != xh_core_maps)
-            xh_map_destroy(&xh_core_maps);
-    }
-    
     pthread_mutex_unlock(&xh_core_mutex);
-    return r;
 }
 
-int xh_core_stop()
+int xh_core_refresh(int async)
 {
-    if(!xh_core_running) return 0;
+    //init
+    xh_core_init_once();
+    if(!xh_core_init_ok) return XH_ERRNO_UNKNOWN;
+
+    if(async)
+    {
+        //init for async
+        xh_core_init_async_once();
+        if(!xh_core_async_init_ok) return XH_ERRNO_UNKNOWN;
     
-    pthread_mutex_lock(&xh_core_mutex);
-    xh_core_running = 0;
-    xh_core_refresh_need = 0;
-    pthread_cond_signal(&xh_core_cond);
-    pthread_mutex_unlock(&xh_core_mutex);
-
-    pthread_join(xh_core_refresh_tid, NULL);
-    xh_map_destroy(&xh_core_maps);
-
-    xh_elf_uninit_sig_handler();
-
+        //refresh async
+        pthread_mutex_lock(&xh_core_mutex);
+        xh_core_refresh_thread_do = 1;
+        pthread_cond_signal(&xh_core_cond);
+        pthread_mutex_unlock(&xh_core_mutex);
+    }
+    else
+    {
+        //refresh sync
+        pthread_mutex_lock(&xh_core_refresh_mutex);
+        xh_core_refresh_impl();
+        pthread_mutex_unlock(&xh_core_refresh_mutex);
+    }
+    
     return 0;
 }
 
-int xh_core_refresh()
+void xh_core_enable_debug(int flag)
 {
-    if(!xh_core_running) return XH_ERRNO_NOTRUN;
-    
+    xh_log_priority = (flag ? ANDROID_LOG_DEBUG : ANDROID_LOG_WARN);
+}
+
+void xh_core_clear()
+{
+    //stop the async refresh thread
+    if(xh_core_async_init_ok)
+    {
+        pthread_mutex_lock(&xh_core_mutex);
+        xh_core_refresh_thread_running = 0;
+        pthread_cond_signal(&xh_core_cond);
+        pthread_mutex_unlock(&xh_core_mutex);
+        
+        pthread_join(xh_core_refresh_thread_tid, NULL);
+    }
+
+    //unregister the sig handler
+    if(xh_core_init_ok)
+    {
+        xh_elf_uninit_sig_handler();
+    }
+
     pthread_mutex_lock(&xh_core_mutex);
-    xh_core_refresh_need = 1;
-    pthread_cond_signal(&xh_core_cond);
-    pthread_mutex_unlock(&xh_core_mutex);
-    return 0;
-}
-
-
-#if 0
-
-//unavailable on Android 7.0+
-//hook for dlopen()
-static void *(*xh_core_dlopen_old)(const char *, int) = NULL;
-static void *xh_core_dlopen_new(const char *filename, int flags)
-{
-    void *r = NULL;
-    
-    XH_LOG_INFO("catch dlopen(%s, %d)\n", filename, flags);
-
-    if(NULL != xh_core_dlopen_old)
+    pthread_mutex_lock(&xh_core_refresh_mutex);
+        
+    //free all map info
+    xh_core_map_info_t *mi, *mi_tmp;
+    RB_FOREACH_SAFE(mi, xh_core_map_info_tree, &xh_core_map_info, mi_tmp)
     {
-        r = xh_core_dlopen_old(filename, flags);
-        xh_core_refresh();
+        RB_REMOVE(xh_core_map_info_tree, &xh_core_map_info, mi);
+        if(mi->pathname) free(mi->pathname);
+        free(mi);
     }
-    return r;
-}
 
-//unavailable on Android 7.0+
-//hook for android_dlopen_ext()
-static void *(*xh_core_android_dlopen_ext_old)(const char *, int, const void *) = NULL;
-static void *xh_core_android_dlopen_ext_new(const char *filename, int flags, const void *extinfo)
-{
-    void *r = NULL;
-    
-    XH_LOG_INFO("catch android_dlopen_ext(%s, %d, %p)\n", filename, flags, extinfo);
-
-    if(NULL != xh_core_android_dlopen_ext_old)
+    //free all hook info
+    xh_core_hook_info_t *hi, *hi_tmp;
+    TAILQ_FOREACH_SAFE(hi, &xh_core_hook_info, link, hi_tmp)
     {
-        r = xh_core_android_dlopen_ext_old(filename, flags, extinfo);
-        xh_core_refresh();
-    }
-    return r;
-}
-
-//unavailable on Android 7.0+
-static void xh_core_hook_dl()
-{
-    xh_core_hook_register_impl(NULL, "dlopen", xh_core_dlopen_new, (void **)(&xh_core_dlopen_old));
-    xh_core_hook_register_impl(NULL, "android_dlopen_ext", xh_core_android_dlopen_ext_new, (void **)(&xh_core_android_dlopen_ext_old));
-}
-
+        TAILQ_REMOVE(&xh_core_hook_info, hi, link);
+#if XH_CORE_DEBUG
+        free(hi->pathname_regex_str);
 #endif
+        regfree(&(hi->pathname_regex));
+        free(hi->symbol);
+        free(hi);
+    }
+    
+    pthread_mutex_unlock(&xh_core_refresh_mutex);
+    pthread_mutex_unlock(&xh_core_mutex);
+}
