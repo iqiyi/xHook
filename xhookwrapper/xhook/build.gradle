@@ -1,7 +1,7 @@
 apply plugin: 'com.android.library'
 apply plugin: 'maven'
 
-def version = "1.1.1"
+def version = "1.1.2"
 
 android {
     compileSdkVersion 26
@@ -27,7 +27,7 @@ android {
         repositories {
             mavenDeployer {
                 repository(url: "http://maven.mbd.qiyi.domain/nexus/content/repositories/mcg-arch/") {
-                    authentication(userName: "mcg-arch", password: "123456")
+                    authentication(userName: "mcg-arch", password: "")
                 }
                 pom.version = "$version"
                 pom.artifactId = "xhook"
