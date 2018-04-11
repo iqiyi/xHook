@@ -1,11 +1,13 @@
-#xhook
+xhook
+======
 
 xhook is a PLT (Procedure Linkage Table) hook library for Android native ELF (executable and shared library).
 
 xhook has been keeping optimized on stability and compatibility.
 
 
-##Feature
+Feature
+-------
 
 * Supports Android 4.0+ (API level 14+).
 * Supports armeabi, armeabi-v7a and arm64-v8a.
@@ -16,7 +18,8 @@ xhook has been keeping optimized on stability and compatibility.
 * Pure C code. Small library size.
 
 
-##Build
+Build
+-----
 
 You need google NDK for building xhook.
 
@@ -39,9 +42,10 @@ You need google NDK for building xhook.
 ```
 
 
-##API
+APIs
+----
 
-###Register hook info
+* **Register hook info**
 
 ```
 int xhook_register(const char  *pathname_regex_str,  
@@ -56,7 +60,7 @@ The `new_func` **must** have the same function declaration as the original one.
 
 The regular expression for `pathname_regex_str` only support **POSIX BRE**.
 
-###Do hook
+* **Do hook**
 
 ```
 int xhook_refresh(int async);
@@ -69,7 +73,7 @@ Pass `1` to `async` for asynchronous hook. Pass `0` to `async` for synchronous h
 xhook will keep a global cache for saving the last ELF loading info from `/proc/self/maps`. This cache will also be updated in `xhook_refresh`. With this cache, `xhook_refresh` can determine which ELF is newly loaded. We only need to do hook in these newly loaded ELF.
 
 
-###Clear cache
+* **Clear cache**
 
 ```
 void xhook_clear();
@@ -79,7 +83,7 @@ Clear all cache owned by xhook, reset all global flags to default value.
 
 If you confirm that all call entries you want have been hooked, you could call this function to save some memory.
 
-###Enable/Disable debug info
+* **Enable/Disable debug info**
 
 ```
 void xhook_enable_debug(int flag);
@@ -90,7 +94,8 @@ Pass `1` to `flag` for enable debug info. Pass `0` to `flag` for disable debug i
 Debug info will be sent to logcat with tag `xhook`.
 
 
-##Example
+Example
+-------
 
 ```
 //monitor memory leak
@@ -129,7 +134,8 @@ xhook_register(".*samsung.*/libEGL\\.so$", "bad_code", my_nice_code, NULL);
 xhook_refresh(1);
 ```
 
-##License
+License
+-------
 
 Copyright (c) 2018 iQiYi Inc. All rights reserved.
 
