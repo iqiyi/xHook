@@ -1,3 +1,8 @@
+//Use of this source code is governed by a MIT-style
+//license that can be found in LICENSE file.
+//
+//Copyright (c) 2018 iQiYi Inc. All rights reserved.
+//
 #ifndef XH_CORE_H
 #define XH_CORE_H 1
 

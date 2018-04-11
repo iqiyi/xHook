@@ -1,3 +1,8 @@
+//Use of this source code is governed by a MIT-style
+//license that can be found in LICENSE file.
+//
+//Copyright (c) 2018 iQiYi Inc. All rights reserved.
+//
 #include <inttypes.h>
 #include <stdint.h>
 #include <ctype.h>
@@ -5,8 +10,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <regex.h>
-#include "xh_queue.h"
-#include "xh_tree.h"
+#include "queue.h"
+#include "tree.h"
 #include "xh_errno.h"
 #include "xh_log.h"
 #include "xh_elf.h"

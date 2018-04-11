@@ -1,8 +1,13 @@
+//Use of this source code is governed by a MIT-style
+//license that can be found in LICENSE file.
+//
+//Copyright (c) 2018 iQiYi Inc. All rights reserved.
+//
 #include "xh_version.h"
 
 #define XH_VERSION_MAJOR 1
 #define XH_VERSION_MINOR 1
-#define XH_VERSION_EXTRA 1
+#define XH_VERSION_EXTRA 2
 
 #define XH_VERSION ((XH_VERSION_MAJOR << 16) | (XH_VERSION_MINOR <<  8) | (XH_VERSION_EXTRA))
 

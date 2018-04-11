@@ -27,8 +27,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef XH_TREE_H
-#define XH_TREE_H
+#ifndef TREE_H
+#define TREE_H
 
 /* #include <sys/cdefs.h> */
 #ifndef __unused

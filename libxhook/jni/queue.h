@@ -30,11 +30,11 @@
  * $FreeBSD: stable/9/sys/sys/queue.h 252365 2013-06-29 04:25:40Z lstewart $
  */
 
-#ifndef XH_QUEUE_H
-#define XH_QUEUE_H
+#ifndef QUEUE_H
+#define QUEUE_H
 
 /* #include <sys/cdefs.h> */
-#define xh_queue_containerof(ptr, type, field) ((type *)((char *)(ptr) - ((char *)&((type *)0)->field)))
+#define __containerof(ptr, type, field) ((type *)((char *)(ptr) - ((char *)&((type *)0)->field)))
 
 /*
  * This file defines four types of data structures: singly-linked lists,
@@ -225,7 +225,7 @@
 
 #define LIST_PREV(elm, head, type, field)                               \
     ((elm)->field.le_prev == &LIST_FIRST((head)) ? NULL :               \
-     xh_queue_containerof((elm)->field.le_prev, struct type, field.le_next))
+     __containerof((elm)->field.le_prev, struct type, field.le_next))
 
 #define LIST_FOREACH(var, head, field)                                  \
     for ((var) = LIST_FIRST((head));                                    \
@@ -319,7 +319,7 @@
 
 #define STAILQ_LAST(head, type, field)                                  \
     (STAILQ_EMPTY((head)) ? NULL :                                      \
-     xh_queue_containerof((head)->stqh_last, struct type, field.stqe_next))
+     __containerof((head)->stqh_last, struct type, field.stqe_next))
 
 #define STAILQ_FOREACH(var, head, field)                                \
     for((var) = STAILQ_FIRST((head));                                   \
