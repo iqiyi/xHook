@@ -828,6 +828,7 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
     uint32_t  *raw;
     unsigned int prot = 0;
     int r;
+    if((ElfW(Addr))(self->dyn) < self->base_addr) return XH_ERRNO_FORMAT;
     if(0 != (r = xh_util_get_mem_protect((uintptr_t)dyn, self->dyn_sz, pathname, &prot)))
     {
         XH_LOG_ERROR("get mem prot for dyn failed. %s. ret: %d", pathname, r);
@@ -849,33 +850,48 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
             dyn = dyn_end;
             break;
         case DT_STRTAB:
-            self->strtab = (const char *)(self->bias_addr + dyn->d_un.d_ptr);
-            break;
+            {
+                self->strtab = (const char *)(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))(self->strtab) < self->base_addr) return XH_ERRNO_FORMAT;
+                break;
+            }
         case DT_SYMTAB:
-            self->symtab = (ElfW(Sym) *)(self->bias_addr + dyn->d_un.d_ptr);
-            break;
+            {
+                self->symtab = (ElfW(Sym) *)(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))(self->symtab) < self->base_addr) return XH_ERRNO_FORMAT;
+                break;
+            }
         case DT_PLTREL:
             //use rel or rela?
             self->is_use_rela = (dyn->d_un.d_val == DT_RELA ? 1 : 0);
             break;
         case DT_JMPREL:
-            self->relplt = (ElfW(Addr))(self->bias_addr + dyn->d_un.d_ptr);
-            break;
+            {
+                self->relplt = (ElfW(Addr))(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))(self->relplt) < self->base_addr) return XH_ERRNO_FORMAT;
+                break;
+            }
         case DT_PLTRELSZ:
             self->relplt_sz = dyn->d_un.d_val;
             break;
         case DT_REL:
         case DT_RELA:
-            self->reldyn = (ElfW(Addr))(self->bias_addr + dyn->d_un.d_ptr);
-            break;
+            {
+                self->reldyn = (ElfW(Addr))(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))(self->reldyn) < self->base_addr) return XH_ERRNO_FORMAT;
+                break;
+            }
         case DT_RELSZ:
         case DT_RELASZ:
             self->reldyn_sz = dyn->d_un.d_val;
             break;
         case DT_ANDROID_REL:
         case DT_ANDROID_RELA:
-            self->relandroid = (ElfW(Addr))(self->bias_addr + dyn->d_un.d_ptr);
-            break;
+            {
+                self->relandroid = (ElfW(Addr))(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))(self->relandroid) < self->base_addr) return XH_ERRNO_FORMAT;
+                break;
+            }
         case DT_ANDROID_RELSZ:
         case DT_ANDROID_RELASZ:
             self->relandroid_sz = dyn->d_un.d_val;
@@ -883,6 +899,7 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
         case DT_HASH:
             {
                 raw = (uint32_t *)(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))raw < self->base_addr) return XH_ERRNO_FORMAT;
                 self->bucket_cnt  = raw[0];
                 self->chain_cnt   = raw[1];
                 self->bucket      = &raw[2];
@@ -892,6 +909,7 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
         case DT_GNU_HASH:
             {
                 raw = (uint32_t *)(self->bias_addr + dyn->d_un.d_ptr);
+                if((ElfW(Addr))raw < self->base_addr) return XH_ERRNO_FORMAT;
                 self->bucket_cnt  = raw[0];
                 self->symoffset   = raw[1];
                 self->bloom_sz    = raw[2];
@@ -996,6 +1014,7 @@ static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section,
 
     //do replace
     addr = self->bias_addr + r_offset;
+    if(addr < self->base_addr) return XH_ERRNO_FORMAT;
     if(0 != (r = xh_elf_replace_function(self, symbol, addr, new_func, old_func)))
     {
         XH_LOG_ERROR("replace function failed: %s at %s\n", symbol, section);
