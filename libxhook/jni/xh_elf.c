@@ -328,22 +328,32 @@ static uint32_t xh_elf_gnu_hash(const uint8_t *name)
     return h;
 }
 
-static ElfW(Phdr) *xh_elf_get_lowest_segment_by_type(xh_elf_t *self, const ElfW(Word) type)
+static ElfW(Phdr) *xh_elf_get_first_segment_by_type(xh_elf_t *self, ElfW(Word) type)
 {
     ElfW(Phdr) *phdr;
-    ElfW(Phdr) *target_phdr = NULL;
     
     for(phdr = self->phdr; phdr < self->phdr + self->ehdr->e_phnum; phdr++)
     {
         if(phdr->p_type == type)
         {
-            if(NULL == target_phdr || phdr->p_vaddr < target_phdr->p_vaddr)
-            {
-                target_phdr = phdr;
-            }
+            return phdr;
         }
     }
-    return target_phdr;
+    return NULL;
+}
+
+static ElfW(Phdr) *xh_elf_get_first_segment_by_type_offset(xh_elf_t *self, ElfW(Word) type, ElfW(Off) offset)
+{
+    ElfW(Phdr) *phdr;
+    
+    for(phdr = self->phdr; phdr < self->phdr + self->ehdr->e_phnum; phdr++)
+    {
+        if(phdr->p_type == type && phdr->p_offset == offset)
+        {
+            return phdr;
+        }
+    }
+    return NULL;
 }
 
 static int xh_elf_hash_lookup(xh_elf_t *self, const char *symbol, uint32_t *symidx)
@@ -781,44 +791,29 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
     if(NULL == pathname) return XH_ERRNO_INVAL;
 
     self->base_addr = (ElfW(Addr))base_addr;
-    self->ehdr      = (ElfW(Ehdr) *)base_addr;
-    self->phdr      = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
+    self->ehdr = (ElfW(Ehdr) *)base_addr;
+    self->phdr = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
 
-    //find the lowest load-segment
-    ElfW(Phdr) *lhdr_0 = xh_elf_get_lowest_segment_by_type(self, PT_LOAD);
-    if(NULL == lhdr_0)
+    //find the first load-segment with offset 0
+    ElfW(Phdr) *phdr0 = xh_elf_get_first_segment_by_type_offset(self, PT_LOAD, 0);
+    if(NULL == phdr0)
     {
-        XH_LOG_ERROR("Can NOT found load segment. %s", pathname);
-        return XH_ERRNO_FORMAT;
-    }
-
-    //check first load-segment's offset
-    if(0 != lhdr_0->p_offset)
-    {
-        //this is an unusual case
-        //this means we have to read ELF header info from file, NOT from memory
-        //give up
-        XH_LOG_ERROR("first load-segment offset NOT 0 (offset: %p). %s",
-                     (void *)(lhdr_0->p_offset), pathname);
+        XH_LOG_ERROR("Can NOT found the first load segment. %s", pathname);
         return XH_ERRNO_FORMAT;
     }
 
 #if XH_ELF_DEBUG
-    //check first load-segment's vaddr
-    if(0 != lhdr_0->p_vaddr)
-    {
-        //this is an unusual case
-        //be careful
-        XH_LOG_INFO("first load-segment vaddr NOT 0 (vaddr: %p). %s",
-                    (void *)(lhdr_0->p_vaddr), pathname);
-    }
+    if(0 != phdr0->p_vaddr)
+        XH_LOG_DEBUG("first load-segment vaddr NOT 0 (vaddr: %p). %s",
+                     (void *)(phdr0->p_vaddr), pathname);
 #endif
 
     //save load bias addr
-    self->bias_addr = self->base_addr - lhdr_0->p_vaddr;
+    if(self->base_addr < phdr0->p_vaddr) return XH_ERRNO_FORMAT;
+    self->bias_addr = self->base_addr - phdr0->p_vaddr;
     
     //find dynamic-segment
-    ElfW(Phdr) *dhdr = xh_elf_get_lowest_segment_by_type(self, PT_DYNAMIC);
+    ElfW(Phdr) *dhdr = xh_elf_get_first_segment_by_type(self, PT_DYNAMIC);
     if(NULL == dhdr)
     {
         XH_LOG_ERROR("Can NOT found dynamic segment. %s", pathname);

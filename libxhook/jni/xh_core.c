@@ -143,16 +143,15 @@ static void xh_core_refresh_impl()
         if(sscanf(line, "%"PRIxPTR"-%*lx %4s %lx %*x:%*x %*d%n", &base_addr, perm, &offset, &pathname_pos) != 3) continue;
 
         //check permission
-        if(perm[0] != 'r' || perm[2] != 'x' || perm[3] != 'p') continue;
+        if(perm[0] != 'r') continue;
+        if(perm[3] != 'p') continue; //do not touch the shared memory
 
         //check offset
-        if(0 != offset)
-        {
-#if XH_CORE_DEBUG
-            XH_LOG_INFO("offset in maps NOT 0: %s", line);
-#endif
-            continue;
-        }
+        //
+        //We are trying to find ELF header in memory.
+        //It can only be found at the beginning of a mapped memory regions
+        //whose offset is 0.
+        if(0 != offset) continue;
 
         //get pathname
         while(isspace(line[pathname_pos]) && pathname_pos < (int)(sizeof(line) - 1))
@@ -169,7 +168,8 @@ static void xh_core_refresh_impl()
         if(0 == pathname_len) continue;
         if('[' == pathname[0]) continue;
 
-        //check if we need to hook this elf
+        //check pathname
+        //if we need to hook this elf?
         found = 0;
         TAILQ_FOREACH(hi, &xh_core_hook_info, link)
         {
@@ -182,6 +182,9 @@ static void xh_core_refresh_impl()
         if(0 == found) continue;
 
         //check elf header format
+        //
+        //We are trying to do this checking as late as possible.
+        //To avoid some rare segment fault.
         if(0 != xh_elf_check_elfheader(base_addr)) continue;
         
         //check existed map item
@@ -189,18 +192,30 @@ static void xh_core_refresh_impl()
         if(NULL != (mi = RB_FIND(xh_core_map_info_tree, &xh_core_map_info, &mi_key)))
         {
             //exist
+            RB_REMOVE(xh_core_map_info_tree, &xh_core_map_info, mi);
+            
+            //repeated?
+            //We only keep the first one, that is the real base address
+            if(NULL != RB_INSERT(xh_core_map_info_tree, &map_info_refreshed, mi))
+            {
+#if XH_CORE_DEBUG
+                XH_LOG_DEBUG("repeated map info when update: %s", line);
+#endif
+                free(mi->pathname);
+                free(mi);
+                continue;
+            }
+
+            //re-hook if base_addr changed
             if(mi->base_addr != base_addr)
             {
-                //base_addr changed
-                mi->base_addr = base_addr; //save the new base_addr
-                xh_core_hook(mi); //re-hook
+                mi->base_addr = base_addr;
+                xh_core_hook(mi);
             }
-            RB_REMOVE(xh_core_map_info_tree, &xh_core_map_info, mi);
-            RB_INSERT(xh_core_map_info_tree, &map_info_refreshed, mi);
         }
         else
         {
-            //not exist, this is a new map item
+            //not exist, create a new map info
             if(NULL == (mi = (xh_core_map_info_t *)malloc(sizeof(xh_core_map_info_t)))) continue;
             if(NULL == (mi->pathname = strdup(pathname)))
             {
@@ -208,8 +223,21 @@ static void xh_core_refresh_impl()
                 continue;
             }
             mi->base_addr = base_addr;
+
+            //repeated?
+            //We only keep the first one, that is the real base address
+            if(NULL != RB_INSERT(xh_core_map_info_tree, &map_info_refreshed, mi))
+            {
+#if XH_CORE_DEBUG
+                XH_LOG_DEBUG("repeated map info when create: %s", line);
+#endif
+                free(mi->pathname);
+                free(mi);
+                continue;
+            }
+
+            //hook
             xh_core_hook(mi); //hook
-            RB_INSERT(xh_core_map_info_tree, &map_info_refreshed, mi);
         }
     }
     fclose(fp);
@@ -217,6 +245,9 @@ static void xh_core_refresh_impl()
     //free all missing map item, maybe dlclosed?
     RB_FOREACH_SAFE(mi, xh_core_map_info_tree, &xh_core_map_info, mi_tmp)
     {
+#if XH_CORE_DEBUG
+        XH_LOG_DEBUG("remove missing map info: %s", mi->pathname);
+#endif
         RB_REMOVE(xh_core_map_info_tree, &xh_core_map_info, mi);
         if(mi->pathname) free(mi->pathname);
         free(mi);
