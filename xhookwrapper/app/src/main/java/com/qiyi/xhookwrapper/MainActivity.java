@@ -11,37 +11,34 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        //init the target lib
-        com.qiyi.test.Test.getInstance().init();
-
-        //init xhook
+        //load xhook
         com.qiyi.xhook.XHook.getInstance().init(this.getApplicationContext());
         if(!com.qiyi.xhook.XHook.getInstance().isInited()) {
             return;
         }
-        //com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
+        com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
 
-        //init your biz lib
+        //load and run your biz lib (for register hook points)
         com.qiyi.biz.Biz.getInstance().init();
+        com.qiyi.biz.Biz.getInstance().start();
 
-        //target lib run
+        //xhook do refresh
+        com.qiyi.xhook.XHook.getInstance().refresh(false);
+
+        //load and run the target lib
+        com.qiyi.test.Test.getInstance().init();
         com.qiyi.test.Test.getInstance().start();
-
-        //for debug, get a chance to the target lib to run before hooked
-        //you can compare the different before and after hooking
         try {
             Thread.sleep(200);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        //register hook points
-        com.qiyi.biz.Biz.getInstance().start();
+        //xhook do refresh again
+        com.qiyi.xhook.XHook.getInstance().refresh(false);
 
-        //do refresh
-        com.qiyi.xhook.XHook.getInstance().refresh(true);
-
-        //do refresh for some reason, maybe called after some System.loadLibrary() and System.load()
+        //xhook do refresh again for some reason,
+        //maybe called after some System.loadLibrary() and System.load()
         //*
         new Thread(new Runnable() {
             @Override
