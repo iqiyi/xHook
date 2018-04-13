@@ -1,4 +1,4 @@
-![xhook logo](res/xhook_logo.png)
+<img src="res/xhook_logo.png" width="300" height="120">
 
 xhook
 =====
