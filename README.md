@@ -1,4 +1,15 @@
-<img src="res/xhook_logo.png" width="300" height="120">
+```
+
+              oooo                            oooo        
+              `888                            `888        
+  oooo    ooo  888 .oo.    .ooooo.   .ooooo.   888  oooo  
+   `88b..8P'   888P"Y88b  d88' `88b d88' `88b  888 .8P'   
+     Y888'     888   888  888   888 888   888  888888.    
+   .o8"'88b    888   888  888   888 888   888  888 `88b.  
+  o88'   888o o888o o888o `Y8bod8P' `Y8bod8P' o888o o888o 
+
+
+```
 
 xhook
 =====
@@ -133,10 +144,8 @@ xhook_register("^/system/.*$", "mmap",   my_mmap,   NULL);
 xhook_register("^/vendor/.*$", "munmap", my_munmap, NULL);
 
 //defense to some injection attacks
-xhook_register(".*com\\.qihoo.*\\.so$", "malloc",       my_malloc_always_return_NULL, NULL);
-xhook_register(".*/liblbeclient\\.so$", "hack_connect", connect, NULL);
-xhook_register(".*/libavb\\.so$",       "hack_connect", connect, NULL);
-xhook_register(".*/libchost\\.so$",     "hack_connect", connect, NULL);
+xhook_register(".*com\\.qihoo.*\\.so$", "malloc",  my_malloc_always_return_NULL, NULL);
+xhook_register(".*/liblbeclient\\.so$", "connect", my_connect_with_recorder,     NULL);
 
 //fix some system bug
 xhook_register(".*samsung.*/libEGL\\.so$", "bad_code", my_nice_code, NULL);
