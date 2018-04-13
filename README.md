@@ -1,11 +1,4 @@
-<pre style="color:#00FF00;background-color:#000000;width:fit-content">
-        _                 _      
-  __  _| |__   ___   ___ | | __  
-  \ \/ / '_ \ / _ \ / _ \| |/ /  
-   >  <| | | | (_) | (_) |   <   
-  /_/\_\_| |_|\___/ \___/|_|\_\  
-
-</pre>
+![xhook logo](res/xhook_logo.png)
 
 xhook
 =====
