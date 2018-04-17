@@ -157,6 +157,8 @@ xhook_refresh(1);
 License
 -------
 
-Copyright (c) 2018 iQiYi Inc. All rights reserved.
+Copyright (c) 2018-present, iQIYI, Inc. All rights reserved.
 
-Use of this source code is governed by a MIT-style license that can be found in the LICENSE file.
+Most source code in xhook are MIT licensed. Some other source code have BSD-style licenses.
+
+Please refer to the LICENSE file for detailed information.

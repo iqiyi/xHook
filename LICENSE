@@ -1,14 +1,15 @@
-Use of this source code is governed by a MIT-style license that can be found
-in this file.
+Copyright (c) 2018-present, iQIYI, Inc. All rights reserved.
 
-Copyright (c) 2018 iQiYi Inc. All rights reserved.
+Most source code in xhook are MIT licensed. Some other source code
+have BSD-style licenses.
+
+A copy of the MIT License is included in this file.
 
 
-Other dependencies
-==================
+Source code Licensed under the BSD 2-Clause License
+===================================================
 
-1. tree.h
----------
+tree.h
 
 Copyright 2002 Niels Provos <provos@citi.umich.edu>
 All rights reserved.
@@ -33,8 +34,11 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-2. queue.h
-----------
+
+Source code Licensed under the BSD 3-Clause License
+===================================================
+
+queue.h
 
 Copyright (c) 1991, 1993 The Regents of the University of California.
 All rights reserved.
