@@ -34,6 +34,9 @@ Build
 -----
 
 You need google NDK for building xhook.
+See: https://developer.android.com/ndk/downloads/index.html
+
+The latest version of xhook is developed and debugged with the NDK version **r16b**.
 
 * build the libraries (libxhook.so and other libraries for test)
 

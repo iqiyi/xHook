@@ -22,6 +22,7 @@
 // Created by caikelun on 2018-04-11.
 
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <ctype.h>
 #include <stdlib.h>

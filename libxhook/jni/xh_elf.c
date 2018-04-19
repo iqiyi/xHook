@@ -45,21 +45,21 @@
 #endif
 
 #if defined(__arm__)
-#define R_GENERIC_JUMP_SLOT R_ARM_JUMP_SLOT      //.rel.plt
-#define R_GENERIC_GLOB_DAT  R_ARM_GLOB_DAT       //.rel.dyn
-#define R_GENERIC_ABS       R_ARM_ABS32          //.rel.dyn
+#define XL_ELF_R_GENERIC_JUMP_SLOT R_ARM_JUMP_SLOT      //.rel.plt
+#define XL_ELF_R_GENERIC_GLOB_DAT  R_ARM_GLOB_DAT       //.rel.dyn
+#define XL_ELF_R_GENERIC_ABS       R_ARM_ABS32          //.rel.dyn
 #elif defined(__aarch64__)
-#define R_GENERIC_JUMP_SLOT R_AARCH64_JUMP_SLOT  //.rel.plt
-#define R_GENERIC_GLOB_DAT  R_AARCH64_GLOB_DAT   //.rel.dyn
-#define R_GENERIC_ABS       R_AARCH64_ABS64      //.rel.dyn
+#define XL_ELF_R_GENERIC_JUMP_SLOT R_AARCH64_JUMP_SLOT  //.rel.plt
+#define XL_ELF_R_GENERIC_GLOB_DAT  R_AARCH64_GLOB_DAT   //.rel.dyn
+#define XL_ELF_R_GENERIC_ABS       R_AARCH64_ABS64      //.rel.dyn
 #endif
 
 #if defined(__LP64__)
-#define ELF_R_SYM(info)  ELF64_R_SYM(info)
-#define ELF_R_TYPE(info) ELF64_R_TYPE(info)
+#define XL_ELF_R_SYM(info)  ELF64_R_SYM(info)
+#define XL_ELF_R_TYPE(info) ELF64_R_TYPE(info)
 #else
-#define ELF_R_SYM(info)  ELF32_R_SYM(info)
-#define ELF_R_TYPE(info) ELF32_R_TYPE(info)
+#define XL_ELF_R_SYM(info)  ELF32_R_SYM(info)
+#define XL_ELF_R_TYPE(info) ELF32_R_TYPE(info)
 #endif
 
 //signal handler for SIGSEGV
@@ -738,23 +738,23 @@ static void xh_elf_dump_rel(xh_elf_t *self, const char *type, ElfW(Addr) rel_add
     {
         if(self->is_use_rela)
         {
-            sym = &(self->symtab[ELF_R_SYM(rela[i].r_info)]);
+            sym = &(self->symtab[XL_ELF_R_SYM(rela[i].r_info)]);
             XH_LOG_DEBUG(fmt,
                          rela[i].r_offset,
                          rela[i].r_info,
-                         ELF_R_TYPE(rela[i].r_info),
-                         ELF_R_SYM(rela[i].r_info),
+                         XL_ELF_R_TYPE(rela[i].r_info),
+                         XL_ELF_R_SYM(rela[i].r_info),
                          sym->st_value,
                          self->strtab + sym->st_name);
         }
         else
         {
-            sym = &(self->symtab[ELF_R_SYM(rel[i].r_info)]);
+            sym = &(self->symtab[XL_ELF_R_SYM(rel[i].r_info)]);
             XH_LOG_DEBUG(fmt,
                          rel[i].r_offset,
                          rel[i].r_info,
-                         ELF_R_TYPE(rel[i].r_info),
-                         ELF_R_SYM(rel[i].r_info),
+                         XL_ELF_R_TYPE(rel[i].r_info),
+                         XL_ELF_R_SYM(rel[i].r_info),
                          sym->st_value,
                          self->strtab + sym->st_name);
         }
@@ -1018,13 +1018,13 @@ static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section,
     }
 
     //check sym
-    r_sym = ELF_R_SYM(r_info);
+    r_sym = XL_ELF_R_SYM(r_info);
     if(r_sym != symidx) return 0;
 
     //check type
-    r_type = ELF_R_TYPE(r_info);
-    if(is_plt && r_type != R_GENERIC_JUMP_SLOT) return 0;
-    if(!is_plt && (r_type != R_GENERIC_GLOB_DAT && r_type != R_GENERIC_ABS)) return 0;
+    r_type = XL_ELF_R_TYPE(r_info);
+    if(is_plt && r_type != XL_ELF_R_GENERIC_JUMP_SLOT) return 0;
+    if(!is_plt && (r_type != XL_ELF_R_GENERIC_GLOB_DAT && r_type != XL_ELF_R_GENERIC_ABS)) return 0;
 
     //we found it
     XH_LOG_INFO("found %s at %s offset: %p\n", symbol, section, (void *)r_offset);
