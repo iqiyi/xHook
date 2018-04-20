@@ -56,6 +56,14 @@ The latest version of xhook is developed and debugged with the NDK version **r16
 ./clean_libs.sh
 ```
 
+* try the demo APP
+
+```
+cd ./xhookwrapper/
+./gradlew assembleDebug
+adb install ./app/build/outputs/apk/debug/app-debug.apk
+```
+
 
 APIs
 ----
