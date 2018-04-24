@@ -40,5 +40,5 @@ void Java_com_qiyi_biz_NativeHandler_start(JNIEnv* env, jobject obj)
 
     xhook_register("^/system/.*\\.so$",  "__android_log_print", my_system_log_print,  NULL);
     xhook_register("^/vendor/.*\\.so$",  "__android_log_print", my_system_log_print,  NULL);
-    xhook_register("^/.*/libtest\\.so$", "__android_log_print", my_libtest_log_print, NULL);
+    xhook_register(".*/libtest\\.so$", "__android_log_print", my_libtest_log_print, NULL);
 }

@@ -16,7 +16,8 @@ public class MainActivity extends AppCompatActivity {
         if(!com.qiyi.xhook.XHook.getInstance().isInited()) {
             return;
         }
-        com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
+        //com.qiyi.xhook.XHook.getInstance().enableDebug(true); //default is false
+        //com.qiyi.xhook.XHook.getInstance().enableSigSegvProtection(false); //default is true
 
         //load and run your biz lib (for register hook points)
         com.qiyi.biz.Biz.getInstance().init();

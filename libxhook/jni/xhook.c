@@ -35,12 +35,17 @@ int xhook_refresh(int async)
     return xh_core_refresh(async);
 }
 
+void xhook_clear()
+{
+    return xh_core_clear();
+}
+
 void xhook_enable_debug(int flag)
 {
     return xh_core_enable_debug(flag);
 }
 
-void xhook_clear()
+void xhook_enable_sigsegv_protection(int flag)
 {
-    return xh_core_clear();
+    return xh_core_enable_sigsegv_protection(flag);
 }

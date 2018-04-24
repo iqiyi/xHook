@@ -28,7 +28,6 @@
 #include <link.h>
 #include <string.h>
 #include <errno.h>
-#include <setjmp.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -45,55 +44,22 @@
 #endif
 
 #if defined(__arm__)
-#define XL_ELF_R_GENERIC_JUMP_SLOT R_ARM_JUMP_SLOT      //.rel.plt
-#define XL_ELF_R_GENERIC_GLOB_DAT  R_ARM_GLOB_DAT       //.rel.dyn
-#define XL_ELF_R_GENERIC_ABS       R_ARM_ABS32          //.rel.dyn
+#define XH_ELF_R_GENERIC_JUMP_SLOT R_ARM_JUMP_SLOT      //.rel.plt
+#define XH_ELF_R_GENERIC_GLOB_DAT  R_ARM_GLOB_DAT       //.rel.dyn
+#define XH_ELF_R_GENERIC_ABS       R_ARM_ABS32          //.rel.dyn
 #elif defined(__aarch64__)
-#define XL_ELF_R_GENERIC_JUMP_SLOT R_AARCH64_JUMP_SLOT  //.rel.plt
-#define XL_ELF_R_GENERIC_GLOB_DAT  R_AARCH64_GLOB_DAT   //.rel.dyn
-#define XL_ELF_R_GENERIC_ABS       R_AARCH64_ABS64      //.rel.dyn
+#define XH_ELF_R_GENERIC_JUMP_SLOT R_AARCH64_JUMP_SLOT  //.rel.plt
+#define XH_ELF_R_GENERIC_GLOB_DAT  R_AARCH64_GLOB_DAT   //.rel.dyn
+#define XH_ELF_R_GENERIC_ABS       R_AARCH64_ABS64      //.rel.dyn
 #endif
 
 #if defined(__LP64__)
-#define XL_ELF_R_SYM(info)  ELF64_R_SYM(info)
-#define XL_ELF_R_TYPE(info) ELF64_R_TYPE(info)
+#define XH_ELF_R_SYM(info)  ELF64_R_SYM(info)
+#define XH_ELF_R_TYPE(info) ELF64_R_TYPE(info)
 #else
-#define XL_ELF_R_SYM(info)  ELF32_R_SYM(info)
-#define XL_ELF_R_TYPE(info) ELF32_R_TYPE(info)
+#define XH_ELF_R_SYM(info)  ELF32_R_SYM(info)
+#define XH_ELF_R_TYPE(info) ELF32_R_TYPE(info)
 #endif
-
-//signal handler for SIGSEGV
-static volatile int     xl_elf_segv_flag = 0;
-static sigjmp_buf       xl_elf_segv_env;
-static struct sigaction xl_elf_segv_sigact_old;
-
-static void xl_elf_segv_handler(int sig)
-{
-    (void)sig;
-    
-    if(xl_elf_segv_flag)
-        siglongjmp(xl_elf_segv_env, 1);
-    else
-        sigaction(SIGSEGV, &xl_elf_segv_sigact_old, NULL);
-}
-
-int xh_elf_init_sig_handler()
-{
-    struct sigaction act;
-    
-    if(0 != sigemptyset(&act.sa_mask)) return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
-    act.sa_handler = xl_elf_segv_handler;
-    
-    if(0 != sigaction(SIGSEGV, &act, &xl_elf_segv_sigact_old))
-        return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
-
-    return 0;
-}
-
-void xh_elf_uninit_sig_handler()
-{
-    sigaction(SIGSEGV, &xl_elf_segv_sigact_old, NULL);
-}
 
 //iterator for plain PLT
 typedef struct
@@ -470,7 +436,6 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
 {
     void         *old_addr;
     unsigned int  old_prot = 0;
-    //unsigned int  new_prot = 0;
     unsigned int  need_prot = PROT_READ | PROT_WRITE;
     int           r;
 
@@ -484,7 +449,7 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
         XH_LOG_ERROR("get addr prot failed. ret: %d", r);
         return r;
     }
-
+    
     if(old_prot != need_prot)
     {
         //set new prot
@@ -493,10 +458,6 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
             XH_LOG_ERROR("set addr prot failed. ret: %d", r);
             return r;
         }
-
-        //check
-        //if(0 != (r = xh_util_get_addr_protect(addr, self->pathname, &new_prot))) return r;
-        //if(new_prot != need_prot) return XH_ERRNO_SEGVACC;
     }
     
     //save old func
@@ -504,21 +465,7 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
     if(NULL != old_func) *old_func = old_addr;
 
     //replace func
-    //
-    //We have tried our best to ensure that the address has write permission.
-    //But as a result, there are still about 3/100000 app crash rates caused by
-    //this write operation. (sig: SIGSEGV, code: SEGV_ACCERR)
-    //This is a clear and harmless crash point, so we just add a try-catch here.
-    xl_elf_segv_flag = 1;
-    if(0 == sigsetjmp(xl_elf_segv_env, 1))
-    {
-        *(void **)addr = new_func; //do the dangerous operation
-    }
-    else
-    {
-        XH_LOG_WARN("SIGSEGV catched when replace for %s, %s", self->pathname, symbol);
-    }
-    xl_elf_segv_flag = 0;
+    *(void **)addr = new_func; //segmentation fault sometimes
 
     if(old_prot != need_prot)
     {
@@ -538,11 +485,6 @@ static int xh_elf_replace_function(xh_elf_t *self, const char *symbol, ElfW(Addr
 
 static int xh_elf_check(xh_elf_t *self)
 {
-    if(NULL == self->pathname)
-    {
-        XH_LOG_ERROR("pathname == NULL\n");
-        return 1;
-    }
     if(0 == self->base_addr)
     {
         XH_LOG_ERROR("base_addr == 0\n");
@@ -738,23 +680,23 @@ static void xh_elf_dump_rel(xh_elf_t *self, const char *type, ElfW(Addr) rel_add
     {
         if(self->is_use_rela)
         {
-            sym = &(self->symtab[XL_ELF_R_SYM(rela[i].r_info)]);
+            sym = &(self->symtab[XH_ELF_R_SYM(rela[i].r_info)]);
             XH_LOG_DEBUG(fmt,
                          rela[i].r_offset,
                          rela[i].r_info,
-                         XL_ELF_R_TYPE(rela[i].r_info),
-                         XL_ELF_R_SYM(rela[i].r_info),
+                         XH_ELF_R_TYPE(rela[i].r_info),
+                         XH_ELF_R_SYM(rela[i].r_info),
                          sym->st_value,
                          self->strtab + sym->st_name);
         }
         else
         {
-            sym = &(self->symtab[XL_ELF_R_SYM(rel[i].r_info)]);
+            sym = &(self->symtab[XH_ELF_R_SYM(rel[i].r_info)]);
             XH_LOG_DEBUG(fmt,
                          rel[i].r_offset,
                          rel[i].r_info,
-                         XL_ELF_R_TYPE(rel[i].r_info),
-                         XL_ELF_R_SYM(rel[i].r_info),
+                         XH_ELF_R_TYPE(rel[i].r_info),
+                         XH_ELF_R_SYM(rel[i].r_info),
                          sym->st_value,
                          self->strtab + sym->st_name);
         }
@@ -804,13 +746,15 @@ static void xh_elf_dump(xh_elf_t *self)
 
 int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
 {
-    if(NULL != self->pathname) return 0; //inited?
+    if(0 == base_addr || NULL == pathname) return XH_ERRNO_INVAL;
 
-    if(NULL == pathname) return XH_ERRNO_INVAL;
-
+    //always reset
+    memset(self, 0, sizeof(xh_elf_t));
+    
+    self->pathname = pathname;
     self->base_addr = (ElfW(Addr))base_addr;
     self->ehdr = (ElfW(Ehdr) *)base_addr;
-    self->phdr = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff);
+    self->phdr = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff); //segmentation fault sometimes
 
     //find the first load-segment with offset 0
     ElfW(Phdr) *phdr0 = xh_elf_get_first_segment_by_type_offset(self, PT_LOAD, 0);
@@ -844,24 +788,9 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
     ElfW(Dyn) *dyn     = self->dyn;
     ElfW(Dyn) *dyn_end = self->dyn + (self->dyn_sz / sizeof(ElfW(Dyn)));
     uint32_t  *raw;
-    unsigned int prot = 0;
-    int r;
-    if((ElfW(Addr))(self->dyn) < self->base_addr) return XH_ERRNO_FORMAT;
-    if(0 != (r = xh_util_get_mem_protect((uintptr_t)dyn, self->dyn_sz, pathname, &prot)))
-    {
-        XH_LOG_ERROR("get mem prot for dyn failed. %s. ret: %d", pathname, r);
-        return XH_ERRNO_FORMAT;
-    }
-    if(0 == (prot & PROT_READ))
-    {
-        //In principle, we do NOT need to do this.
-        //In practice, this check avoids about 1/100000 app crash rates caused by: "dyn->d_tag".
-        XH_LOG_ERROR("check mem prot for dyn failed. %s", pathname);
-        return XH_ERRNO_FORMAT;
-    }
     for(; dyn < dyn_end; dyn++)
     {
-        switch(dyn->d_tag)
+        switch(dyn->d_tag) //segmentation fault sometimes
         {
         case DT_NULL:
             //the end of the dynamic-section
@@ -943,11 +872,9 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
         }
     }
 
-    self->pathname = pathname;
-
+    //check android rel/rela
     if(0 != self->relandroid)
     {
-        //check android rel/rela
         const char *rel = (const char *)self->relandroid;
         if(self->relandroid_sz < 4 ||
            rel[0] != 'A' ||
@@ -962,11 +889,11 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
         self->relandroid += 4;
         self->relandroid_sz -= 4;
     }
-    
+
+    //check elf info
     if(0 != xh_elf_check(self))
     {
-        XH_LOG_ERROR("elf init check failed. %s", self->pathname);
-        memset(self, 0, sizeof(xh_elf_t));
+        XH_LOG_ERROR("elf init check failed. %s", pathname);
         return XH_ERRNO_FORMAT;
     }
     
@@ -980,11 +907,6 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
                 self->relplt_sz, self->reldyn_sz, self->relandroid_sz);
 
     return 0;
-}
-
-void xh_elf_reset(xh_elf_t *self)
-{
-    memset(self, 0, sizeof(xh_elf_t));
 }
 
 static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section,
@@ -1018,13 +940,13 @@ static int xh_elf_find_and_replace_func(xh_elf_t *self, const char *section,
     }
 
     //check sym
-    r_sym = XL_ELF_R_SYM(r_info);
+    r_sym = XH_ELF_R_SYM(r_info);
     if(r_sym != symidx) return 0;
 
     //check type
-    r_type = XL_ELF_R_TYPE(r_info);
-    if(is_plt && r_type != XL_ELF_R_GENERIC_JUMP_SLOT) return 0;
-    if(!is_plt && (r_type != XL_ELF_R_GENERIC_GLOB_DAT && r_type != XL_ELF_R_GENERIC_ABS)) return 0;
+    r_type = XH_ELF_R_TYPE(r_info);
+    if(is_plt && r_type != XH_ELF_R_GENERIC_JUMP_SLOT) return 0;
+    if(!is_plt && (r_type != XH_ELF_R_GENERIC_GLOB_DAT && r_type != XH_ELF_R_GENERIC_ABS)) return 0;
 
     //we found it
     XH_LOG_INFO("found %s at %s offset: %p\n", symbol, section, (void *)r_offset);

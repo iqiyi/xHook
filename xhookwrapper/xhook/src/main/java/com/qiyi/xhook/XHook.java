@@ -70,7 +70,23 @@ public class XHook {
     }
 
     /**
-     * Enable/disable the debug log to logcat. (default is: disable)
+     * Clear all cache.
+     */
+    public synchronized void clear() {
+        if(!inited) {
+            return;
+        }
+
+        try {
+            com.qiyi.xhook.NativeHandler.getInstance().clear();
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+            Log.e("xhook", "xhook native clear failed");
+        }
+    }
+
+    /**
+     * Enable/disable the debug log to logcat. (disabled by default)
      * @param flag the bool flag.
      */
     public synchronized void enableDebug(boolean flag) {
@@ -87,19 +103,19 @@ public class XHook {
     }
 
     /**
-     * Clear all cache.
+     * Enable/disable the segmentation fault protection. (enabled by default)
+     * @param flag the bool flag.
      */
-    public synchronized void clear() {
-        if(!inited) {
+    public synchronized void enableSigSegvProtection(boolean flag) {
+        if (!inited) {
             return;
         }
 
         try {
-            com.qiyi.xhook.NativeHandler.getInstance().clear();
+            com.qiyi.xhook.NativeHandler.getInstance().enableSigSegvProtection(flag);
         } catch (Throwable ex) {
             ex.printStackTrace();
-            Log.e("xhook", "xhook native clear failed");
+            Log.e("xhook", "xhook native enableSigSegvProtection failed");
         }
     }
-
 }

@@ -34,6 +34,14 @@ JNIEXPORT jint JNI_API_DEF(refresh)(JNIEnv *env, jobject obj, jboolean async)
     return xhook_refresh(async ? 1 : 0);
 }
 
+JNIEXPORT void JNI_API_DEF(clear)(JNIEnv *env, jobject obj)
+{
+    (void)env;
+    (void)obj;
+
+    xhook_clear();
+}
+
 JNIEXPORT void JNI_API_DEF(enableDebug)(JNIEnv *env, jobject obj, jboolean flag)
 {
     (void)env;
@@ -42,10 +50,10 @@ JNIEXPORT void JNI_API_DEF(enableDebug)(JNIEnv *env, jobject obj, jboolean flag)
     xhook_enable_debug(flag ? 1 : 0);
 }
 
-JNIEXPORT void JNI_API_DEF(clear)(JNIEnv *env, jobject obj)
+JNIEXPORT void JNI_API_DEF(enableSigSegvProtection)(JNIEnv *env, jobject obj, jboolean flag)
 {
     (void)env;
     (void)obj;
 
-    xhook_clear();
+    xhook_enable_sigsegv_protection(flag ? 1 : 0);
 }

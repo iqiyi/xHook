@@ -29,6 +29,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <regex.h>
+#include <setjmp.h>
+#include <errno.h>
 #include "queue.h"
 #include "tree.h"
 #include "xh_errno.h"
@@ -68,6 +70,42 @@ static __inline__ int xh_core_map_info_cmp(xh_core_map_info_t *a, xh_core_map_in
 typedef RB_HEAD(xh_core_map_info_tree, xh_core_map_info) xh_core_map_info_tree_t;
 RB_GENERATE_STATIC(xh_core_map_info_tree, xh_core_map_info, link, xh_core_map_info_cmp)
 
+//signal handler for SIGSEGV
+//for xh_elf_init(), xh_elf_hook(), xh_elf_check_elfheader()
+static int              xh_core_sigsegv_enable = 1; //enable by default
+static struct sigaction xh_core_sigsegv_act_old;
+static volatile int     xh_core_sigsegv_flag = 0;
+static sigjmp_buf       xh_core_sigsegv_env;
+static void xh_core_sigsegv_handler(int sig)
+{
+    (void)sig;
+    
+    if(xh_core_sigsegv_flag)
+        siglongjmp(xh_core_sigsegv_env, 1);
+    else
+        sigaction(SIGSEGV, &xh_core_sigsegv_act_old, NULL);
+}
+static int xh_core_add_sigsegv_handler()
+{
+    struct sigaction act;
+
+    if(!xh_core_sigsegv_enable) return 0;
+    
+    if(0 != sigemptyset(&act.sa_mask)) return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
+    act.sa_handler = xh_core_sigsegv_handler;
+    
+    if(0 != sigaction(SIGSEGV, &act, &xh_core_sigsegv_act_old))
+        return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
+
+    return 0;
+}
+static void xh_core_del_sigsegv_handler()
+{
+    if(!xh_core_sigsegv_enable) return;
+    
+    sigaction(SIGSEGV, &xh_core_sigsegv_act_old, NULL);
+}
+
 
 static xh_core_hook_info_queue_t xh_core_hook_info = TAILQ_HEAD_INITIALIZER(xh_core_hook_info);
 static xh_core_map_info_tree_t   xh_core_map_info  = RB_INITIALIZER(&xh_core_map_info);
@@ -88,8 +126,14 @@ int xh_core_register(const char *pathname_regex_str, const char *symbol,
 {
     xh_core_hook_info_t *hi;
     regex_t              regex;
-    
+
     if(NULL == pathname_regex_str || NULL == symbol || NULL == new_func) return XH_ERRNO_INVAL;
+
+    if(xh_core_inited)
+    {
+        XH_LOG_ERROR("do not register hook after refresh(): %s, %s", pathname_regex_str, symbol);
+        return XH_ERRNO_INVAL;
+    }
 
     if(0 != regcomp(&regex, pathname_regex_str, 0)) return XH_ERRNO_INVAL;
 
@@ -118,13 +162,37 @@ int xh_core_register(const char *pathname_regex_str, const char *symbol,
     return 0;
 }
 
-static void xh_core_hook(xh_core_map_info_t *mi)
+static int xh_core_check_elf_header(uintptr_t base_addr, const char *pathname)
+{
+    if(!xh_core_sigsegv_enable)
+    {
+        return xh_elf_check_elfheader(base_addr);
+    }
+    else
+    {
+        int ret = XH_ERRNO_UNKNOWN;
+        
+        xh_core_sigsegv_flag = 1;
+        if(0 == sigsetjmp(xh_core_sigsegv_env, 1))
+        {
+            ret = xh_elf_check_elfheader(base_addr);
+        }
+        else
+        {
+            ret = XH_ERRNO_SEGVERR;
+            XH_LOG_WARN("catch SIGSEGV when check_elfheader: %s", pathname);
+        }
+        xh_core_sigsegv_flag = 0;
+        return ret;
+    }
+}
+
+static void xh_core_hook_impl(xh_core_map_info_t *mi)
 {
     //init
-    xh_elf_reset(&(mi->elf));
     if(0 != xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname)) return;
-
-    //hook
+    
+    //hook for each registered hook info
     xh_core_hook_info_t *hi;
     TAILQ_FOREACH(hi, &xh_core_hook_info, link)
     {
@@ -132,6 +200,27 @@ static void xh_core_hook(xh_core_map_info_t *mi)
         {
             xh_elf_hook(&(mi->elf), hi->symbol, hi->new_func, hi->old_func);
         }
+    }
+}
+
+static void xh_core_hook(xh_core_map_info_t *mi)
+{
+    if(!xh_core_sigsegv_enable)
+    {
+        xh_core_hook_impl(mi);
+    }
+    else
+    {    
+        xh_core_sigsegv_flag = 1;
+        if(0 == sigsetjmp(xh_core_sigsegv_env, 1))
+        {
+            xh_core_hook_impl(mi);
+        }
+        else
+        {
+            XH_LOG_WARN("catch SIGSEGV when init or hook: %s", mi->pathname);
+        }
+        xh_core_sigsegv_flag = 0;
     }
 }
 
@@ -148,7 +237,7 @@ static void xh_core_refresh_impl()
     xh_core_map_info_t      *mi, *mi_tmp;
     xh_core_map_info_t       mi_key;
     xh_core_hook_info_t     *hi;
-    int                      found;
+    int                      match;
     xh_core_map_info_tree_t  map_info_refreshed = RB_INITIALIZER(&map_info_refreshed);
 
     if(NULL == (fp = fopen("/proc/self/maps", "r")))
@@ -189,22 +278,20 @@ static void xh_core_refresh_impl()
 
         //check pathname
         //if we need to hook this elf?
-        found = 0;
+        match = 0;
         TAILQ_FOREACH(hi, &xh_core_hook_info, link)
         {
             if(0 == regexec(&(hi->pathname_regex), pathname, 0, NULL, 0))
             {
-                found = 1;
+                match = 1;
                 break;
             }
         }
-        if(0 == found) continue;
+        if(0 == match) continue;
 
         //check elf header format
-        //
-        //We are trying to do this checking as late as possible.
-        //To avoid some rare segment fault.
-        if(0 != xh_elf_check_elfheader(base_addr)) continue;
+        //We are trying to do ELF header checking as late as possible.
+        if(0 != xh_core_check_elf_header(base_addr, pathname)) continue;
         
         //check existed map item
         mi_key.pathname = pathname;
@@ -334,7 +421,7 @@ static void xh_core_init_once()
 #endif
     
     //register signal handler
-    if(0 != xh_elf_init_sig_handler()) goto end;
+    if(0 != xh_core_add_sigsegv_handler()) goto end;
 
     //OK
     xh_core_init_ok = 1;
@@ -397,11 +484,6 @@ int xh_core_refresh(int async)
     return 0;
 }
 
-void xh_core_enable_debug(int flag)
-{
-    xh_log_priority = (flag ? ANDROID_LOG_DEBUG : ANDROID_LOG_WARN);
-}
-
 void xh_core_clear()
 {
     //stop the async refresh thread
@@ -418,7 +500,7 @@ void xh_core_clear()
     //unregister the sig handler
     if(xh_core_init_ok)
     {
-        xh_elf_uninit_sig_handler();
+        xh_core_del_sigsegv_handler();
     }
 
     pthread_mutex_lock(&xh_core_mutex);
@@ -448,4 +530,14 @@ void xh_core_clear()
     
     pthread_mutex_unlock(&xh_core_refresh_mutex);
     pthread_mutex_unlock(&xh_core_mutex);
+}
+
+void xh_core_enable_debug(int flag)
+{
+    xh_log_priority = (flag ? ANDROID_LOG_DEBUG : ANDROID_LOG_WARN);
+}
+
+void xh_core_enable_sigsegv_protection(int flag)
+{
+    xh_core_sigsegv_enable = (flag ? 1 : 0);
 }

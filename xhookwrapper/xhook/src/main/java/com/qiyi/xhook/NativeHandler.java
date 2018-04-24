@@ -16,7 +16,10 @@ public class NativeHandler {
 
     public native int refresh(boolean async);
 
+    public native void clear();
+
     public native void enableDebug(boolean flag);
 
-    public native void clear();
+    public native void enableSigSegvProtection(boolean flag);
+
 }

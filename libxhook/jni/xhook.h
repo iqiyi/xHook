@@ -35,9 +35,11 @@ int xhook_register(const char *pathname_regex_str, const char *symbol,
 
 int xhook_refresh(int async) XHOOK_EXPORT;
 
+void xhook_clear() XHOOK_EXPORT;
+
 void xhook_enable_debug(int flag) XHOOK_EXPORT;
 
-void xhook_clear() XHOOK_EXPORT;
+void xhook_enable_sigsegv_protection(int flag) XHOOK_EXPORT;
 
 #ifdef __cplusplus
 }

@@ -56,7 +56,9 @@ The latest version of xhook is developed and debugged with the NDK version **r16
 ./clean_libs.sh
 ```
 
-* try the demo APP
+
+Demo
+----
 
 ```
 cd ./xhookwrapper/
@@ -65,10 +67,10 @@ adb install ./app/build/outputs/apk/debug/app-debug.apk
 ```
 
 
-APIs
+API
 ----
 
-External APIs header file: `libxhook/jni/xhook.h`
+External API header file: `libxhook/jni/xhook.h`
 
 * **Register hook info**
 
@@ -101,7 +103,6 @@ Return zero if successful, non-zero otherwise.
 
 xhook will keep a global cache for saving the last ELF loading info from `/proc/self/maps`. This cache will also be updated in `xhook_refresh`. With this cache, `xhook_refresh` can determine which ELF is newly loaded. We only need to do hook in these newly loaded ELF.
 
-
 * **Clear cache**
 
 ```
@@ -118,22 +119,34 @@ If you confirm that all PLT entries you want have been hooked, you could call th
 void xhook_enable_debug(int flag);
 ```
 
-Pass `1` to `flag` for enable debug info. Pass `0` to `flag` for disable debug info. (xhook disable debug info by default)
+Pass `1` to `flag` for enable debug info. Pass `0` to `flag` for disable. (**disabled** by default)
 
 Debug info will be sent to logcat with tag `xhook`.
+
+* **Enable/Disable SFP (segmentation fault protection)**
+
+```
+void xhook_enable_sigsegv_protection(int flag);
+```
+
+Pass `1` to `flag` for enable SFP. Pass `0` to `flag` for disable. (**enabled** by default) 
+
+**xhook is NOT a compliant business layer library. We have to calculate the value of some pointers directly. Reading or writing the memory pointed to by these pointers will cause a segmentation fault in some unusual situations and environment. The APP crash rate increased which caused by xhook is about one ten-millionth (0.0000001) according to our test. (The increased crash rate is also related to the ELFs and symbols you need to hook). Finally, we have to use some trick to ignore this harmless crashing. We called it SFP (segmentation fault protection) which consists of: `sigaction()`, `SIGSEGV`, `siglongjmp()` and `sigsetjmp()`.**
+
+**You should always enable SFP for release-APP, this will prevent your app from crashing. On the other hand, you should always disable SFP for debug-APP, so you can't miss any common coding mistakes that should be fixed.**
 
 
 Examples
 --------
 
 ```
-//detect memory leak
+//detect memory leaks
 xhook_register(".*\\.so$", "malloc",  my_malloc,  NULL);
 xhook_register(".*\\.so$", "calloc",  my_calloc,  NULL);
 xhook_register(".*\\.so$", "realloc", my_realloc, NULL);
 xhook_register(".*\\.so$", "free",    my_free,    NULL);
 
-//parse sockets lifecycle
+//inspect sockets lifecycle
 xhook_register(".*\\.so$", "getaddrinfo", my_getaddrinfo, NULL);
 xhook_register(".*\\.so$", "socket",      my_socket,      NULL);
 xhook_register(".*\\.so$", "setsockopt"   my_setsockopt,  NULL);
@@ -154,11 +167,11 @@ xhook_register("^/system/.*$", "mmap",   my_mmap,   NULL);
 xhook_register("^/vendor/.*$", "munmap", my_munmap, NULL);
 
 //defense to some injection attacks
-xhook_register(".*com\\.qihoo.*\\.so$", "malloc",  my_malloc_always_return_NULL, NULL);
-xhook_register(".*/liblbeclient\\.so$", "connect", my_connect_with_recorder,     NULL);
+xhook_register(".*com\\.hacker.*\\.so$", "malloc",  my_malloc_always_return_NULL, NULL);
+xhook_register(".*/libhacker\\.so$",     "connect", my_connect_with_recorder,     NULL);
 
 //fix some system bug
-xhook_register(".*samsung.*/libEGL\\.so$", "bad_code", my_nice_code, NULL);
+xhook_register(".*some_vendor.*/libvictim\\.so$", "bad_func", my_nice_func, NULL);
 
 //hook now!
 xhook_refresh(1);

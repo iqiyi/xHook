@@ -74,15 +74,9 @@ typedef struct
 } xh_elf_t;
 
 int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname);
-void xh_elf_reset(xh_elf_t *self);
-
 int xh_elf_hook(xh_elf_t *self, const char *symbol, void *new_func, void **old_func);
 
-
 int xh_elf_check_elfheader(uintptr_t base_addr);
-
-int xh_elf_init_sig_handler();
-void xh_elf_uninit_sig_handler();
 
 #ifdef __cplusplus
 }
