@@ -10,6 +10,8 @@
 
 ```
 
+[中文版的 README 在这里](README.zh-CN.md)
+
 xhook
 =====
 
@@ -131,7 +133,7 @@ void xhook_enable_sigsegv_protection(int flag);
 
 Pass `1` to `flag` for enable SFP. Pass `0` to `flag` for disable. (**enabled** by default) 
 
-**xhook is NOT a compliant business layer library. We have to calculate the value of some pointers directly. Reading or writing the memory pointed to by these pointers will cause a segmentation fault in some unusual situations and environment. The APP crash rate increased which caused by xhook is about one ten-millionth (0.0000001) according to our test. (The increased crash rate is also related to the ELFs and symbols you need to hook). Finally, we have to use some trick to ignore this harmless crashing. We called it SFP (segmentation fault protection) which consists of: `sigaction()`, `SIGSEGV`, `siglongjmp()` and `sigsetjmp()`.**
+**xhook is NOT a compliant business layer library. We have to calculate the value of some pointers directly. Reading or writing the memory pointed to by these pointers will cause a segmentation fault in some unusual situations and environment. The APP crash rate increased which caused by xhook is about one ten-millionth (0.0000001) according to our test. (The increased crash rate is also related to the ELFs and symbols you need to hook). Finally, we have to use some trick to prevent this harmless crashing. We called it SFP (segmentation fault protection) which consists of: `sigaction()`, `SIGSEGV`, `siglongjmp()` and `sigsetjmp()`.**
 
 **You should always enable SFP for release-APP, this will prevent your app from crashing. On the other hand, you should always disable SFP for debug-APP, so you can't miss any common coding mistakes that should be fixed.**
 
