@@ -15,7 +15,7 @@ xhook
 
 xhook 是一个针对 Android 平台 ELF (可执行文件和动态库) 的 PLT (Procedure Linkage Table) hook 库。
 
-xhook 一直在为稳定性和兼容性持续的优化中。
+xhook 一直在稳定性和兼容性方面做持续的优化。
 
 
 特性
@@ -23,9 +23,9 @@ xhook 一直在为稳定性和兼容性持续的优化中。
 
 * 支持 Android 4.0 以上版本 (API level 14 以上)。
 * 支持 armeabi, armeabi-v7a 和 arm64-v8a。
-* 支持通过 **ELF HASH** 和 **GNU HASH** 查找符号.
-* 支持通过 **ELF reloc** 和 **ANDROID reloc** 查找重定位信息.
-* **不**需要 ROOT 权限.
+* 支持通过 **ELF HASH** 和 **GNU HASH** 查找符号。
+* 支持通过 **ELF reloc** 和 **ANDROID reloc** 查找重定位信息。
+* **不**需要 ROOT 权限。
 * 不依赖于其他第三方动态库。
 * 纯 C 的代码。比较小的库体积。
 
@@ -180,7 +180,7 @@ xhook_refresh(1);
 许可证
 -------
 
-Copyright (c) 2018-present, iQIYI, Inc. All rights reserved.
+Copyright (c) 2018-present, 爱奇艺, Inc. All rights reserved.
 
 xhook 中大多数的源码使用 MIT 许可证，另外的一些源码使用 BSD 样式的许可证。
 
