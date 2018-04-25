@@ -10,28 +10,27 @@
 
 ```
 
-xhook
-=====
+[README English Version](README.md)
+
+# 概述
 
 xhook 是一个针对 Android 平台 ELF (可执行文件和动态库) 的 PLT (Procedure Linkage Table) hook 库。
 
-xhook 一直在稳定性和兼容性方面做持续的优化。
+xhook 一直在稳定性和兼容性方面做着持续的优化。
 
 
-特性
---------
+# 特征
 
-* 支持 Android 4.0 以上版本 (API level 14 以上)。
+* 支持 Android 4.0 (含) 以上版本 (API level >= 14)。
 * 支持 armeabi, armeabi-v7a 和 arm64-v8a。
-* 支持通过 **ELF HASH** 和 **GNU HASH** 查找符号。
-* 支持通过 **ELF reloc** 和 **ANDROID reloc** 查找重定位信息。
+* 支持 **ELF HASH** 和 **GNU HASH** 索引的符号。
+* 支持 **SLEB128** 编码的重定位信息。
 * **不**需要 ROOT 权限。
-* 不依赖于其他第三方动态库。
+* 不依赖于任何的第三方动态库。
 * 纯 C 的代码。比较小的库体积。
 
 
-编译
------
+# 编译
 
 你需要 google NDK 来编译 xhook。  
 https://developer.android.com/ndk/downloads/index.html
@@ -57,8 +56,7 @@ https://developer.android.com/ndk/downloads/index.html
 ```
 
 
-Demo
-----
+# Demo
 
 ```
 cd ./xhookwrapper/
@@ -67,14 +65,13 @@ adb install ./app/build/outputs/apk/debug/app-debug.apk
 ```
 
 
-API
-----
+# API
 
 外部 API 头文件: `libxhook/jni/xhook.h`
 
-* **注册 hook 信息**
+## 1. 注册 hook 信息
 
-```
+```c
 int xhook_register(const char  *pathname_regex_str,  
                    const char  *symbol,  
                    void        *new_func,  
@@ -89,9 +86,9 @@ int xhook_register(const char  *pathname_regex_str,
 
 `pathname_regex_str` 只支持 **POSIX BRE** 定义的正则表达式语法。
 
-* **执行 hook**
+## 2. 执行 hook
 
-```
+```c
 int xhook_refresh(int async);
 ```
 
@@ -103,9 +100,9 @@ int xhook_refresh(int async);
 
 xhook 在内部维护了一个全局的缓存，用于保存最后一次从 `/proc/self/maps` 读取到的 ELF 加载信息。每次一调用 `xhook_refresh` 函数，这个缓存都将被更新。xhook 使用这个缓存来判断哪些 ELF 是这次新被加载到内存中的。我们每次只需要针对这些新加载的 ELF 做 hook 就可以了。
 
-* **清除缓存**
+## 3. 清除缓存
 
-```
+```c
 void xhook_clear();
 ```
 
@@ -113,9 +110,9 @@ void xhook_clear();
 
 如果你确定你需要的所有 PLT 入口点都已经被替换了，你可以调用这个函数来释放和节省一些内存空间。
 
-* **启用/禁用 调试信息**
+## 4. 启用/禁用 调试信息
 
-```
+```c
 void xhook_enable_debug(int flag);
 ```
 
@@ -123,23 +120,22 @@ void xhook_enable_debug(int flag);
 
 调试信息将被输出到 logcat，对应的 TAG 为：`xhook`。
 
-* **启用/禁用 SFP (段错误保护)**
+## 5. 启用/禁用 SFP (段错误保护)
 
-```
+```c
 void xhook_enable_sigsegv_protection(int flag);
 ```
 
 给 `flag` 参数传 `1` 表示启用 SFP，传 `0` 表示禁用 SFP。 (默认为：**启用**)
 
-**xhook 并不是一个常规的业务层的动态库。在 xhook 中，我们不得不直接计算一些内存指针的值。在一些极端的情况和环境下，读或者写这些指针指向的内存会发生段错误。根据我们的测试，xhook 的行为将导致 APP 崩溃率增加 “一千万分之一” (0.0000001)。（具体崩溃率可能会增加多少，也和你想要 hook 的库和符号有关）。最终，我们不得不使用某些方法来防止这些无害的崩溃。我们叫它SFP (段错误保护)，它是由这些调用和值组成的：`sigaction()`， `SIGSEGV`， `siglongjmp()` 和 `sigsetjmp()`。**
+xhook 并不是一个常规的业务层的动态库。在 xhook 中，我们不得不直接计算一些内存指针的值。在一些极端的情况和环境下，读或者写这些指针指向的内存会发生段错误。根据我们的测试，xhook 的行为将导致 APP 崩溃率增加 “一千万分之一” (0.0000001)。（具体崩溃率可能会增加多少，也和你想要 hook 的库和符号有关）。最终，我们不得不使用某些方法来防止这些无害的崩溃。我们叫它SFP (段错误保护)，它是由这些调用和值组成的：`sigaction()`， `SIGSEGV`， `siglongjmp()` 和 `sigsetjmp()`。
 
 **在 release 版本的 APP 中，你应该始终启用 SFP，这能防止你的 APP 因为 xhook 而崩溃。在 debug 版本的 APP 中，你应该始终禁用 SFP，这样你就不会丢失那些一般性的编码失误导致的段错误，这些段错误是应该被修复的。**
 
 
-应用举例
---------
+# 应用举例
 
-```
+```c
 //监测内存泄露
 xhook_register(".*\\.so$", "malloc",  my_malloc,  NULL);
 xhook_register(".*\\.so$", "calloc",  my_calloc,  NULL);
@@ -177,8 +173,7 @@ xhook_register(".*some_vendor.*/libvictim\\.so$", "bad_func", my_nice_func, NULL
 xhook_refresh(1);
 ```
 
-许可证
--------
+# 许可证
 
 Copyright (c) 2018-present, 爱奇艺, Inc. All rights reserved.
 
@@ -187,7 +182,6 @@ xhook 中大多数的源码使用 MIT 许可证，另外的一些源码使用 BS
 详细信息请查看 LICENSE 文件。
 
 
-联系方式
--------
+# 联系方式
 
 github: https://github.com/iqiyi/xhook
