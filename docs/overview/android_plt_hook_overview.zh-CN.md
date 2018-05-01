@@ -33,7 +33,7 @@ void say_hello();
 #include <stdlib.h>
 #include <stdio.h>
 
-void say_hello()                                                                                                                             
+void say_hello()
 {
     char *buf = malloc(1024);
     if(NULL != buf)
@@ -302,7 +302,7 @@ Dynamic section at offset 0x2e48 contains 30 entries:
     * ELF 的引用计数加一。
 4. 逐个调用列表中 ELF 的构造函数（constructor），这些构造函数的地址是之前从 .dynamic segment 中读取到的（类型为 `DT_INIT` 和 `DT_INIT_ARRAY`）。各 ELF 的构造函数是按照依赖关系逐层调用的，先调用被依赖 ELF 的构造函数，最后调用 libtest.so 自己的构造函数。（ELF 也可以定义自己的析构函数（destructor），在 ELF 被 unload 的时候会被自动调用）
 
-等一下！等一下！我们似乎发现了什么！再看一遍重定位操作（relocate）的部分。难道我们只要从这些 `.relxxx` 中获取到“**目标地址**”，然后在“**目标地址**”中重新填上一个新的函数地址，这样就完成 hook 了吗？也许吧。
+等一下！我们似乎发现了什么！再看一遍重定位操作（relocate）的部分。难道我们只要从这些 `.relxxx` 中获取到“**目标地址**”，然后在“**目标地址**”中重新填上一个新的函数地址，这样就完成 hook 了吗？也许吧。
 
 
 ## 追踪
