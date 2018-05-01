@@ -637,7 +637,9 @@ int main()
 }
 ```
 
-`xhook` 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以上版本 (API level >= 14)。经过了产品级的稳定性和兼容性验证。这 [这里](https://github.com/iqiyi/xhook) 获取 `xhook`。
+`xhook` 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以上版本 (API level >= 14)。经过了产品级的稳定性和兼容性验证。
+
+在 [这里](https://github.com/iqiyi/xhook) 获取 `xhook`。
 
 
 ## FAQ
