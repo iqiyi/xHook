@@ -85,7 +85,7 @@ caikelun@debian:~$
 
 ### 怎么做？
 
-如果我们能对动态库中的函数调用做 hook（替换，拦截，窃听，或者你觉得任何正确的描述方式），那就能够做到很多我们想做的事情。比如 hook `malloc`、`calloc`，`realloc` 和 `free`，我们就能统计出各个动态库分配了多少内存，哪些内存一直被占用没有释放。
+如果我们能对动态库中的函数调用做 hook（替换，拦截，窃听，或者你觉得任何正确的描述方式），那就能够做到很多我们想做的事情。比如 hook `malloc`，`calloc`，`realloc` 和 `free`，我们就能统计出各个动态库分配了多少内存，哪些内存一直被占用没有释放。
 
 这真的能做到吗？答案是：hook 我们自己的进程是完全可以的。hook 其他进程需要 root 权限（对于其他进程，没有 root 权限就没法修改它的内存空间，也没法注入代码）。幸运的是，我们只要 hook 自己就够了。
 
@@ -448,7 +448,7 @@ caikelun@debian:~$
 
 1. `3f90` 是个相对内存地址，需要把它换算成绝对地址。
 2. `3f90` 对应的绝对地址很可能没有写入权限，直接对这个地址赋值会引起段错误。
-3. 新的函数地址即使赋值成功了，my_malloc 也不会被执行，因为处理器有指令缓存（instruction cache）。
+3. 新的函数地址即使赋值成功了，`my_malloc` 也不会被执行，因为处理器有指令缓存（instruction cache）。
 
 我们需要解决这些问题。
 
@@ -509,7 +509,7 @@ ffff0000-ffff1000 r-xp 00000000 00:00 0          [vectors]
 ...........
 ```
 
-maps 返回的是指定进程的内存空间中 mmap 的映射信息，包括各种动态库、可执行文件（如：linker），栈空间，堆空间，甚至还包括字体文件。maps 格式的详细说明见 [这里](http://man7.org/linux/man-pages/man5/proc.5.html)。
+maps 返回的是指定进程的内存空间中 `mmap` 的映射信息，包括各种动态库、可执行文件（如：linker），栈空间，堆空间，甚至还包括字体文件。maps 格式的详细说明见 [这里](http://man7.org/linux/man-pages/man5/proc.5.html)。
 
 我们的 libtest.so 在 maps 中有 3 行记录。offset 为 `0` 的第一行的起始地址 `b6ec6000` 在**绝大多数情况下**就是我们寻找的**基地址**。
 
@@ -529,13 +529,13 @@ int mprotect(void *addr, size_t len, int prot);
 
 ### 指令缓存
 
-修改内存地址后，需要清除处理的指令缓存，让处理器重新从内存中读取这部分指令。方法是调用 `__builtin___clear_cache`：
+注意 `.got` 和 `.data` 的 section 类型是 `PROGBITS`，也就是执行代码。处理器可能会对这部分数据做缓存。修改内存地址后，我们需要清除处理器的指令缓存，让处理器重新从内存中读取这部分指令。方法是调用 `__builtin___clear_cache`：
 
 ```c
 void __builtin___clear_cache (char *begin, char *end);
 ```
 
-注意清除指令缓存时，只能以“页”为单位。`__builtin___clear_cache` 的详细说明见 [这里](https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html)。
+注意清除指令缓存时，也只能以“页”为单位。`__builtin___clear_cache` 的详细说明见 [这里](https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html)。
 
 
 ## 验证
@@ -609,7 +609,7 @@ hello
 caikelun@debian:~$
 ```
 
-是的，我们成功了！我们并没有修改 libtest.so 的代码，甚至没有重新编译它。我们仅仅修改了 main 程序。
+是的，成功了！我们并没有修改 libtest.so 的代码，甚至没有重新编译它。我们仅仅修改了 main 程序。
 
 libtest.so 和 main 的源码放在 github 上，可以从 [这里](https://github.com/iqiyi/xhook/tree/master/docs/overview/code) 获取到。（根据你使用的编译器不同，或者编译器的版本不同，生成的 libtest.so 中，也许 `malloc` 对应的地址不再是 `0x3f90`，这时你需要先用 readelf 确认，然后再到 `main.c` 中修改。）
 
@@ -650,7 +650,7 @@ int main()
 正如你已经注意到的，前面介绍 libtest.so 基地址获取时，为了简化概念和编码方便，用了“**绝大多数情况下**”这种不应该出现的描述方式。对于 hook 来说，精确的基地址计算流程是：
 
 1. 在 maps 中找到找到 offset 为 `0`，且 `pathname` 为目标 ELF 的行。保存该行的 start address 为 `p0`。
-2. 找出 ELF 的 PHT 中第一个类型为 `PT_LOAD` 的 segment，保存该 segment 的虚拟内存相对地址（`p_vaddr`）为 `p1`。
+2. 找出 ELF 的 PHT 中第一个类型为 `PT_LOAD` 且 offset 为 `0` 的 segment，保存该 segment 的虚拟内存相对地址（`p_vaddr`）为 `p1`。
 3. `p0` - `p1` 即为该 ELF 当前的基地址。
 
 绝大多数的 ELF 第一个 `PT_LOAD` segment 的 `p_vaddr` 都是 `0`。
@@ -660,9 +660,9 @@ int main()
 可以在 Android linker 的源码中搜索“load_bias”，可以找到很多详细的注释说明，也可以参考 linker 中对 `load_bias_` 变量的赋值程序逻辑。
 
 
-### 被 hook ELF 使用的编译选项对 hook 有什么影响？
+### 目标 ELF 使用的编译选项对 hook 有什么影响？
 
-假设使用 google NDK。hook 的目标 ELF（例如前面提到的 libtest.so）使用了不同的编译选项，会对 hook 产生一定的影响。
+会有一些影响。
 
 对于外部函数的调用，可以分为 3 中情况：
 
@@ -670,7 +670,7 @@ int main()
 2. 通过全局函数指针调用。无论编译选项如何，都可以被 hook 到。外部函数地址始终保存在 `.data` 中。
 3. 通过局部函数指针调用。如果编译选项为 -O2（默认值），调用将被优化为直接调用（同情况 1）。如果编译选项为 -O0，则在执行 hook 前已经被赋值到临时变量中的外部函数的指针，通过 PLT 方式无法 hook；对于执行 hook 之后才被赋值的，可以通过 PLT 方式 hook。
 
-一般情况下，产品级的 ELF 很少会使用 -O0 进行编译，所以也不必太纠结。但是如果你希望你的 ELF 尽量不被别人 PLT hook，那就首先使用 -O0 来编译，然后尽量早的将外部函数的指针赋值给局部函数指针变量，只后一直使用这些局部函数指针来访问外部函数。
+一般情况下，产品级的 ELF 很少会使用 -O0 进行编译，所以也不必太纠结。但是如果你希望你的 ELF 尽量不被别人 PLT hook，那可以试试使用 -O0 来编译，然后尽量早的将外部函数的指针赋值给局部函数指针变量，之后一直使用这些局部函数指针来访问外部函数。
 
 总之，查看 C/C++ 的源代码对这个问题的理解没有意义，需要查看使用不同的编译选项后，生成的 ELF 的反汇编输出，比较它们的区别，才能知道哪些情况由于什么原因导致无法被 PLT hook。
 
@@ -698,7 +698,7 @@ int main()
 
 解决方案：
 
-* 当 hook 逻辑进入我们认为的危险区域（直接计算内存进行读写）之前，通过一个全局 `flag` 来进行标记，离开危险区域后将 `flag` 复位。
+* 当 hook 逻辑进入我们认为的危险区域（直接计算内存地址进行读写）之前，通过一个全局 `flag` 来进行标记，离开危险区域后将 `flag` 复位。
 * 注册我们自己的 signal handler，只捕获段错误。在 signal handler 中，通过判断 `flag` 的值，来判断当前线程逻辑是否在危险区域中。如果是，就用 `siglongjmp` 跳出 signal handler，直接跳到我们预先设置好的“危险区域以外的下一行代码处”；如果不是，就恢复之前加载器向我们注入的 signal handler，然后直接返回，这时系统会再次向我们的线程发送段错误信号，由于已经恢复了之前的 signal handler，这时会进入默认的系统 signal handler 中走正常逻辑。
 
 具体代码可以参考 `xhook` 中的实现，在源码中搜索 `siglongjmp` 和 `sigsetjmp`。
@@ -718,9 +718,10 @@ inline hook 可以做到，你需要先知道想要 hook 的内部函数符号�
 
 inline hook 方案强大的同时可能带来以下的问题：
 
-* 由于需要直接解析和修改 ELF 中的机器指令（汇编），对于不同架构的处理器、处理器指令集、编译器优化选项、操作系统版本可能存在不同的兼容性问题。
+* 由于需要直接解析和修改 ELF 中的机器指令（汇编码），对于不同架构的处理器、处理器指令集、编译器优化选项、操作系统版本可能存在不同的兼容性和稳定性问题。
 * 发生问题后可能难以分析和定位，一些知名的 inline hook 方案是闭源的。
-* 未知的坑相对较多。可以自行 google。
+* 实现起来相对复杂，难度也较大。
+* 未知的坑相对较多，这个可以自行 google。
 
 建议如果 PLT hook 够用的话，就不必尝试 inline hook 了。
 
