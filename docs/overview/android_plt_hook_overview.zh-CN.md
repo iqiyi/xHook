@@ -574,6 +574,7 @@ void hook()
            sscanf(line, "%"PRIxPTR"-%*lx %*4s 00000000", &base_addr) == 1)
             break;
     }
+    fclose(fp);
     if(0 == base_addr) return;
 
     //the absolute address
