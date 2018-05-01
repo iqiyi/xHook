@@ -11,6 +11,8 @@
 ```
 
 [README English Version](README.md)
+[Android PLT hook 概述 中文版](docs/overview/android_plt_hook_overview.zh-CN.md)
+
 
 # 概述
 
@@ -173,13 +175,16 @@ xhook_register(".*some_vendor.*/libvictim\\.so$", "bad_func", my_nice_func, NULL
 xhook_refresh(1);
 ```
 
+
 # 许可证
 
 Copyright (c) 2018-present, 爱奇艺, Inc. All rights reserved.
 
 xhook 中大多数的源码使用 MIT 许可证，另外的一些源码使用 BSD 样式的许可证。
 
-详细信息请查看 LICENSE 文件。
+详细信息请查看 [LICENSE](LICENSE) 文件。
+
+xhook 的文档使用 [Creative Commons 许可证](LICENSE-docs)。
 
 
 # 联系方式
