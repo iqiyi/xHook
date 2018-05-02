@@ -201,6 +201,8 @@ Key to Flags:
 * `.rel.plt`：对外部函数直接调用的重定位信息。
 * `.rel.dyn`：除 `.rel.plt` 以外的重定位信息。（比如通过全局函数指针来调用外部函数）
 
+![](https://raw.githubusercontent.com/iqiyi/xHook/master/docs/overview/res/elfpltgot.png)
+
 
 ### PHT（program header table）
 
@@ -662,7 +664,7 @@ xhook 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以�
 1. 读 maps，获取 ELF 的内存首地址（start address）。
 2. 验证 ELF 头信息。
 3. 从 PHT 中找到类型为 `PT_LOAD` 且 offset 为 `0` 的 segment。计算 ELF 基地址。
-4. 从 PHT 中找到类型为 `PT_DYNAMIC` 的 segment，从中获取到 `.dynamic` section，从 `.dynamic` section中获取各项 section 对应的内存地址。
+4. 从 PHT 中找到类型为 `PT_DYNAMIC` 的 segment，从中获取到 `.dynamic` section，从 `.dynamic` section中获取其他各项 section 对应的内存地址。
 5. 在 `.dynstr` section 中找到需要 hook 的 symbol 对应的 index 值。
 6. 遍历所有的 `.relxxx` section（重定位 section），查找 symbol index 和 symbol type 都匹配的项，对于这项重定位项，执行 hook 操作。hook 流程如下：
     * 读 maps，确认当前 hook 地址的内存访问权限。
@@ -670,7 +672,7 @@ xhook 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以�
     * 如果调用方需要，就保留 hook 地址当前的值，用于返回。
     * 将 hook 地址的值替换为新的值。（执行 hook）
     * 如果之前用 `mprotect` 修改过内存访问权限，现在还原到之前的权限。
-    * 清楚 hook 地址所在内存页的处理器指令缓存。
+    * 清除 hook 地址所在内存页的处理器指令缓存。
 
 
 ## FAQ
@@ -732,12 +734,14 @@ xhook 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以�
 * 系统会精确的把段错误信号发送给“发生段错误的线程”。
 * 我们希望能有一种隐秘的，且可控的方式来避免段错误引起 APP 崩溃。
 
-先纠正一个思想：不要只从应用层程序开发的角度来看待段错误，段错误不是洪水猛兽，它只是内核与用户进程的一种正常的交流方式。当用户进程访问了无权限或未 mmap 的虚拟内存地址时，内核向用户进程发送 SIGSEGV 信号，来通知用户进程，仅此而已。我们段错误的发生位置是可控的，我们就可以在用户进程中处理它。
+先明确一个思想：不要只从应用层程序开发的角度来看待段错误，段错误不是洪水猛兽，它只是内核与用户进程的一种正常的交流方式。当用户进程访问了无权限或未 mmap 的虚拟内存地址时，内核向用户进程发送 SIGSEGV 信号，来通知用户进程，仅此而已。只要段错误的发生位置是可控的，我们就可以在用户进程中处理它。
 
 解决方案：
 
 * 当 hook 逻辑进入我们认为的危险区域（直接计算内存地址进行读写）之前，通过一个全局 `flag` 来进行标记，离开危险区域后将 `flag` 复位。
 * 注册我们自己的 signal handler，只捕获段错误。在 signal handler 中，通过判断 `flag` 的值，来判断当前线程逻辑是否在危险区域中。如果是，就用 `siglongjmp` 跳出 signal handler，直接跳到我们预先设置好的“危险区域以外的下一行代码处”；如果不是，就恢复之前加载器向我们注入的 signal handler，然后直接返回，这时系统会再次向我们的线程发送段错误信号，由于已经恢复了之前的 signal handler，这时会进入默认的系统 signal handler 中走正常逻辑。
+* 我们把这种机制简称为：SFP (segmentation fault protection，段错误保护)
+* 注意：SFP需要一个开关，让我们随时能够开启和关闭它。在 APP 开发调试阶段，SFP 应该始终被关闭，这样就不会错过由于编码失误导致的段错误，这些错误是应该被修复的；在正式上线后 SFP 应该被开启，这样能保证 APP 不会崩溃。（当然，以采样的形式部分关闭 SFP，用以观察和分析 hook 机制本身导致的崩溃，也是可以考虑的）
 
 具体代码可以参考 `xhook` 中的实现，在源码中搜索 `siglongjmp` 和 `sigsetjmp`。
 
