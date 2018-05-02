@@ -1,6 +1,13 @@
 # Android PLT hook 概述
 
 
+## 获取代码和资源
+
+你始终可以从 [这里](https://github.com/iqiyi/xHook/blob/master/docs/overview/android_plt_hook_overview.zh-CN.md) 访问本文的最新版本。
+
+文中使用的示例代码可以从 [这里](https://github.com/iqiyi/xHook/tree/master/docs/overview/code) 获取。文中提到的 xhook 开源项目可以从 [这里](https://github.com/iqiyi/xHook) 获取。 
+
+
 ## 开始
 
 
@@ -135,6 +142,8 @@ ELF Header:
 
 ELF 文件头中包含了 SHT 和 PHT 在当前 ELF 文件中的起始位置和长度。例如，libtest.so 的 SHT 起始位置为 12744，长度 40 字节；PHT 起始位置为 52，长度 32字节。
 
+![](https://raw.githubusercontent.com/iqiyi/xHook/master/docs/overview/res/elfheader.png)
+
 
 ### SHT（section header table）
 
@@ -238,6 +247,8 @@ Program Headers:
 * 执行视图：ELF 被加载到内存后，以 segment 为单位的数据组织形式。
 
 我们关心的 hook 操作，属于动态形式的内存操作，因此主要关心的是执行视图，即 ELF 被加载到内存后，ELF 中的数据是如何组织和存放的。
+
+![](https://raw.githubusercontent.com/iqiyi/xHook/master/docs/overview/res/elfview.png)
 
 
 ### .dynamic section
@@ -540,6 +551,9 @@ void __builtin___clear_cache (char *begin, char *end);
 
 ## 验证
 
+
+### 修改 main.c
+
 我们把 `main.c` 修改为：
 
 ```c
@@ -614,7 +628,10 @@ caikelun@debian:~$
 
 libtest.so 和 main 的源码放在 github 上，可以从 [这里](https://github.com/iqiyi/xhook/tree/master/docs/overview/code) 获取到。（根据你使用的编译器不同，或者编译器的版本不同，生成的 libtest.so 中，也许 `malloc` 对应的地址不再是 `0x3f90`，这时你需要先用 readelf 确认，然后再到 `main.c` 中修改。）
 
-当然，我们已经开源了一个叫 `xhook` 的工具库。使用 `xhook`，你可以更优雅的完成对 libtest.so 的 hook 操作，也不必担心硬编码 `0x3f90` 导致的兼容性问题。
+
+### 使用 xhook
+
+当然，我们已经开源了一个叫 xhook 的工具库。使用 xhook，你可以更优雅的完成对 libtest.so 的 hook 操作，也不必担心硬编码 `0x3f90` 导致的兼容性问题。
 
 ```c
 #include <stdlib.h>
@@ -638,12 +655,30 @@ int main()
 }
 ```
 
-`xhook` 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以上版本 (API level >= 14)。经过了产品级的稳定性和兼容性验证。
+xhook 支持 armeabi, armeabi-v7a 和 arm64-v8a。支持 Android 4.0 (含) 以上版本 (API level >= 14)。经过了产品级的稳定性和兼容性验证。可以在 [这里](https://github.com/iqiyi/xhook) 获取 `xhook`。
 
-在 [这里](https://github.com/iqiyi/xhook) 获取 `xhook`。
+总结一下 xhook 中执行 PLT hook 的流程：
+
+1. 读 maps，获取 ELF 的内存首地址（start address）。
+2. 验证 ELF 头信息。
+3. 从 PHT 中找到类型为 `PT_LOAD` 且 offset 为 `0` 的 segment。计算 ELF 基地址。
+4. 从 PHT 中找到类型为 `PT_DYNAMIC` 的 segment，从中获取到 `.dynamic` section，从 `.dynamic` section中获取各项 section 对应的内存地址。
+5. 在 `.dynstr` section 中找到需要 hook 的 symbol 对应的 index 值。
+6. 遍历所有的 `.relxxx` section（重定位 section），查找 symbol index 和 symbol type 都匹配的项，对于这项重定位项，执行 hook 操作。hook 流程如下：
+    * 读 maps，确认当前 hook 地址的内存访问权限。
+    * 如果权限不是可读也可写，则用 `mprotect` 修改访问权限为可读也可写。
+    * 如果调用方需要，就保留 hook 地址当前的值，用于返回。
+    * 将 hook 地址的值替换为新的值。（执行 hook）
+    * 如果之前用 `mprotect` 修改过内存访问权限，现在还原到之前的权限。
+    * 清楚 hook 地址所在内存页的处理器指令缓存。
 
 
 ## FAQ
+
+
+### 可以直接从文件中读取 ELF 信息吗？
+
+可以。而且对于格式解析来说，读文件是最稳妥的方式，因为 ELF 在运行时，原理上有很多 section 不需要一直保留在内存中，可以在加载完之后就从内存中丢弃，这样可以节省少量的内存。但是从实践的角度出发，各种平台的动态链接器和加载器，都不会这么做，可能它们认为增加的复杂度得不偿失。所以我们从内存中读取各种 ELF 信息就可以了，读文件反而增加了性能损耗。另外，某些系统库 ELF 文件，APP 也不一定有访问权限。
 
 
 ### 计算基地址的精确方法是什么？
@@ -697,6 +732,8 @@ int main()
 * 系统会精确的把段错误信号发送给“发生段错误的线程”。
 * 我们希望能有一种隐秘的，且可控的方式来避免段错误引起 APP 崩溃。
 
+先纠正一个思想：不要只从应用层程序开发的角度来看待段错误，段错误不是洪水猛兽，它只是内核与用户进程的一种正常的交流方式。当用户进程访问了无权限或未 mmap 的虚拟内存地址时，内核向用户进程发送 SIGSEGV 信号，来通知用户进程，仅此而已。我们段错误的发生位置是可控的，我们就可以在用户进程中处理它。
+
 解决方案：
 
 * 当 hook 逻辑进入我们认为的危险区域（直接计算内存地址进行读写）之前，通过一个全局 `flag` 来进行标记，离开危险区域后将 `flag` 复位。
@@ -725,6 +762,12 @@ inline hook 方案强大的同时可能带来以下的问题：
 * 未知的坑相对较多，这个可以自行 google。
 
 建议如果 PLT hook 够用的话，就不必尝试 inline hook 了。
+
+
+## 联系作者
+
+
+caikelun#gmail.com （请用 @ 替换 #）
 
 
 ## 许可证
