@@ -1,14 +1,4 @@
-```
-
-              oooo                            oooo        
-              `888                            `888        
-  oooo    ooo  888 .oo.    .ooooo.   .ooooo.   888  oooo  
-   `88b..8P'   888P"Y88b  d88' `88b d88' `88b  888 .8P'   
-     Y888'     888   888  888   888 888   888  888888.    
-   .o8"'88b    888   888  888   888 888   888  888 `88b.  
-  o88'   888o o888o o888o `Y8bod8P' `Y8bod8P' o888o o888o 
-
-```
+![](docs/xhooklogo.png)
 
 
 [README 中文版](README.zh-CN.md)
