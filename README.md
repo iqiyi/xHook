@@ -1,4 +1,4 @@
-![](docs/xhooklogo.png)
+<img src="https://github.com/iqiyi/xHook/blob/master/docs/xhooklogo.png?raw=true" alt="xhook" width="60%">
 
 
 [README 中文版](README.zh-CN.md)
