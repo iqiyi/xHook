@@ -179,6 +179,7 @@ Please refer to the [LICENSE](LICENSE) file for detailed information.
 xhook documentation is [Creative Commons licensed](LICENSE-docs).
 
 
-# Contact
+# Contacts
 
-github: https://github.com/iqiyi/xhook
+github: https://github.com/iqiyi/xhook  
+mail: caikelun#qiyi.com (pls replace `#` with `@`)

@@ -181,4 +181,5 @@ xhook 的文档使用 [Creative Commons 许可证](LICENSE-docs)。
 
 # 联系方式
 
-github: https://github.com/iqiyi/xhook
+github: https://github.com/iqiyi/xhook  
+mail: caikelun#qiyi.com （请用 `@` 替换 `#`）
