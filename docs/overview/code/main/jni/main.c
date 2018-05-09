@@ -36,7 +36,7 @@ void hook()
     addr = base_addr + 0x3f90;
     
     //add write permission
-    mprotect((void *)PAGE_START(addr), PAGE_SIZE, PROT_READ | PROT_WRITE);
+    mprotect((void *)PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_WRITE);
 
     //replace the function address
     *(void **)addr = my_malloc;
