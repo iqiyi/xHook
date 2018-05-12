@@ -30,6 +30,11 @@ int xhook_register(const char *pathname_regex_str, const char *symbol,
     return xh_core_register(pathname_regex_str, symbol, new_func, old_func);
 }
 
+int xhook_ignore(const char *pathname_regex_str, const char *symbol)
+{
+    return xh_core_ignore(pathname_regex_str, symbol);
+}
+
 int xhook_refresh(int async)
 {
     return xh_core_refresh(async);

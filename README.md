@@ -19,6 +19,7 @@ xhook has been keeping optimized for stability and compatibility.
 * Support armeabi, armeabi-v7a and arm64-v8a.
 * Support **ELF HASH** and **GNU HASH** indexed symbols.
 * Support **SLEB128** encoded relocation info.
+* Support setting hook info via regular expressions.
 * Do **NOT** need root permission.
 * Do not depends on any third-party shared libraries.
 * Pure C code. Small library size.
@@ -78,9 +79,22 @@ The `new_func` **must** have the same function declaration as the original one.
 
 Return zero if successful, non-zero otherwise.
 
+The regular expression for `pathname_regex_str` only support **POSIX BRE (Basic Regular Expression)**.
+
+## 2. Ignore some hook info
+
+```c
+int xhook_ignore(const char *pathname_regex_str,  
+                 const char *symbol);
+```
+
+Ignore some hook info according to `pathname_regex_str` and `symbol`, from registered hooks by `xhook_register`. If `symbol` is `NULL`, xhook will ignore all symbols from ELF which pathname matches `pathname_regex_str`.
+
+Return zero if successful, non-zero otherwise.
+
 The regular expression for `pathname_regex_str` only support **POSIX BRE**.
 
-## 2. Do hook
+## 3. Do hook
 
 ```c
 int xhook_refresh(int async);
@@ -94,7 +108,7 @@ Return zero if successful, non-zero otherwise.
 
 xhook will keep a global cache for saving the last ELF loading info from `/proc/self/maps`. This cache will also be updated in `xhook_refresh`. With this cache, `xhook_refresh` can determine which ELF is newly loaded. We only need to do hook in these newly loaded ELF.
 
-## 3. Clear cache
+## 4. Clear cache
 
 ```c
 void xhook_clear();
@@ -104,7 +118,7 @@ Clear all cache owned by xhook, reset all global flags to default value.
 
 If you confirm that all PLT entries you want have been hooked, you could call this function to save some memory.
 
-## 4. Enable/Disable debug info
+## 5. Enable/Disable debug info
 
 ```c
 void xhook_enable_debug(int flag);
@@ -114,7 +128,7 @@ Pass `1` to `flag` for enable debug info. Pass `0` to `flag` for disable. (**dis
 
 Debug info will be sent to logcat with tag `xhook`.
 
-## 5. Enable/Disable SFP (segmentation fault protection)
+## 6. Enable/Disable SFP (segmentation fault protection)
 
 ```c
 void xhook_enable_sigsegv_protection(int flag);
@@ -152,9 +166,13 @@ xhook_register(".*\\.so$", "__android_log_print",  my_log_print,  NULL);
 xhook_register(".*\\.so$", "__android_log_vprint", my_log_vprint, NULL);
 xhook_register(".*\\.so$", "__android_log_assert", my_log_assert, NULL);
 
-//tracking
+//tracking (ignore linker and linker64)
 xhook_register("^/system/.*$", "mmap",   my_mmap,   NULL);
 xhook_register("^/vendor/.*$", "munmap", my_munmap, NULL);
+xhook_ignore  (".*/linker$",   "mmap");
+xhook_ignore  (".*/linker$",   "munmap");
+xhook_ignore  (".*/linker64$", "mmap");
+xhook_ignore  (".*/linker64$", "munmap");
 
 //defense to some injection attacks
 xhook_register(".*com\\.hacker.*\\.so$", "malloc",  my_malloc_always_return_NULL, NULL);
@@ -162,6 +180,9 @@ xhook_register(".*/libhacker\\.so$",     "connect", my_connect_with_recorder,   
 
 //fix some system bug
 xhook_register(".*some_vendor.*/libvictim\\.so$", "bad_func", my_nice_func, NULL);
+
+//ignore all hooks in libwebviewchromium.so
+xhook_ignore(".*/libwebviewchromium.so$", NULL);
 
 //hook now!
 xhook_refresh(1);
