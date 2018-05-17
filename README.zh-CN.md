@@ -16,7 +16,7 @@ xhook 一直在稳定性和兼容性方面做着持续的优化。
 # 特征
 
 * 支持 Android 4.0 (含) 以上版本 (API level >= 14)。
-* 支持 armeabi, armeabi-v7a 和 arm64-v8a。
+* 支持 armeabi，armeabi-v7a，arm64-v8a，x86 和 x86_64。
 * 支持 **ELF HASH** 和 **GNU HASH** 索引的符号。
 * 支持 **SLEB128** 编码的重定位信息。
 * 支持通过正则表达式批量设置 hook 信息。

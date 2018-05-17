@@ -16,7 +16,7 @@ xhook has been keeping optimized for stability and compatibility.
 # Features
 
 * Support Android 4.0+ (API level 14+).
-* Support armeabi, armeabi-v7a and arm64-v8a.
+* Support armeabi, armeabi-v7a, arm64-v8a, x86 and x86_64.
 * Support **ELF HASH** and **GNU HASH** indexed symbols.
 * Support **SLEB128** encoded relocation info.
 * Support setting hook info via regular expressions.
