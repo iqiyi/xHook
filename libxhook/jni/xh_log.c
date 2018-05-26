@@ -22,6 +22,6 @@
 // Created by caikelun on 2018-04-11.
 
 #include <android/log.h>
-#include <xh_log.h>
+#include "xh_log.h"
 
 android_LogPriority xh_log_priority = ANDROID_LOG_WARN;
