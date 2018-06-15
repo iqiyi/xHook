@@ -41,7 +41,7 @@
 
 #define XH_CORE_DEBUG 0
 
-//registered hook point's info collection
+//registered hook info collection
 typedef struct xh_core_hook_info
 {
 #if XH_CORE_DEBUG
@@ -54,6 +54,18 @@ typedef struct xh_core_hook_info
     TAILQ_ENTRY(xh_core_hook_info,) link;
 } xh_core_hook_info_t;
 typedef TAILQ_HEAD(xh_core_hook_info_queue, xh_core_hook_info,) xh_core_hook_info_queue_t;
+
+//ignored hook info collection
+typedef struct xh_core_ignore_info
+{
+#if XH_CORE_DEBUG
+    char     *pathname_regex_str;
+#endif
+    regex_t   pathname_regex;
+    char     *symbol; //NULL meaning for all symbols
+    TAILQ_ENTRY(xh_core_ignore_info,) link;
+} xh_core_ignore_info_t;
+typedef TAILQ_HEAD(xh_core_ignore_info_queue, xh_core_ignore_info,) xh_core_ignore_info_queue_t;
 
 //required info from /proc/self/maps
 typedef struct xh_core_map_info
@@ -107,18 +119,19 @@ static void xh_core_del_sigsegv_handler()
 }
 
 
-static xh_core_hook_info_queue_t xh_core_hook_info = TAILQ_HEAD_INITIALIZER(xh_core_hook_info);
-static xh_core_map_info_tree_t   xh_core_map_info  = RB_INITIALIZER(&xh_core_map_info);
-static pthread_mutex_t           xh_core_mutex     = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t            xh_core_cond      = PTHREAD_COND_INITIALIZER;
-static volatile int              xh_core_inited    = 0;
-static volatile int              xh_core_init_ok   = 0;
-static volatile int              xh_core_async_inited  = 0;
-static volatile int              xh_core_async_init_ok = 0;
-static pthread_mutex_t           xh_core_refresh_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t                 xh_core_refresh_thread_tid;
-static volatile int              xh_core_refresh_thread_running = 0;
-static volatile int              xh_core_refresh_thread_do = 0;
+static xh_core_hook_info_queue_t   xh_core_hook_info   = TAILQ_HEAD_INITIALIZER(xh_core_hook_info);
+static xh_core_ignore_info_queue_t xh_core_ignore_info = TAILQ_HEAD_INITIALIZER(xh_core_ignore_info);
+static xh_core_map_info_tree_t     xh_core_map_info    = RB_INITIALIZER(&xh_core_map_info);
+static pthread_mutex_t             xh_core_mutex       = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t              xh_core_cond        = PTHREAD_COND_INITIALIZER;
+static volatile int                xh_core_inited      = 0;
+static volatile int                xh_core_init_ok     = 0;
+static volatile int                xh_core_async_inited  = 0;
+static volatile int                xh_core_async_init_ok = 0;
+static pthread_mutex_t             xh_core_refresh_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t                   xh_core_refresh_thread_tid;
+static volatile int                xh_core_refresh_thread_running = 0;
+static volatile int                xh_core_refresh_thread_do = 0;
 
 
 int xh_core_register(const char *pathname_regex_str, const char *symbol,
@@ -135,7 +148,7 @@ int xh_core_register(const char *pathname_regex_str, const char *symbol,
         return XH_ERRNO_INVAL;
     }
 
-    if(0 != regcomp(&regex, pathname_regex_str, 0)) return XH_ERRNO_INVAL;
+    if(0 != regcomp(&regex, pathname_regex_str, REG_NOSUB)) return XH_ERRNO_INVAL;
 
     if(NULL == (hi = malloc(sizeof(xh_core_hook_info_t)))) return XH_ERRNO_NOMEM;
     if(NULL == (hi->symbol = strdup(symbol)))
@@ -157,6 +170,51 @@ int xh_core_register(const char *pathname_regex_str, const char *symbol,
     
     pthread_mutex_lock(&xh_core_mutex);
     TAILQ_INSERT_TAIL(&xh_core_hook_info, hi, link);
+    pthread_mutex_unlock(&xh_core_mutex);
+
+    return 0;
+}
+
+int xh_core_ignore(const char *pathname_regex_str, const char *symbol)
+{
+    xh_core_ignore_info_t *ii;
+    regex_t                regex;
+
+    if(NULL == pathname_regex_str) return XH_ERRNO_INVAL;
+
+    if(xh_core_inited)
+    {
+        XH_LOG_ERROR("do not ignore hook after refresh(): %s, %s", pathname_regex_str, symbol ? symbol : "ALL");
+        return XH_ERRNO_INVAL;
+    }
+
+    if(0 != regcomp(&regex, pathname_regex_str, REG_NOSUB)) return XH_ERRNO_INVAL;
+
+    if(NULL == (ii = malloc(sizeof(xh_core_ignore_info_t)))) return XH_ERRNO_NOMEM;
+    if(NULL != symbol)
+    {
+        if(NULL == (ii->symbol = strdup(symbol)))
+        {
+            free(ii);
+            return XH_ERRNO_NOMEM;
+        }
+    }
+    else
+    {
+        ii->symbol = NULL; //ignore all symbols
+    }
+#if XH_CORE_DEBUG
+    if(NULL == (ii->pathname_regex_str = strdup(pathname_regex_str)))
+    {
+        free(ii->symbol);
+        free(ii);
+        return XH_ERRNO_NOMEM;
+    }
+#endif
+    ii->pathname_regex = regex;
+
+    pthread_mutex_lock(&xh_core_mutex);
+    TAILQ_INSERT_TAIL(&xh_core_ignore_info, ii, link);
     pthread_mutex_unlock(&xh_core_mutex);
 
     return 0;
@@ -192,13 +250,32 @@ static void xh_core_hook_impl(xh_core_map_info_t *mi)
     //init
     if(0 != xh_elf_init(&(mi->elf), mi->base_addr, mi->pathname)) return;
     
-    //hook for each registered hook info
-    xh_core_hook_info_t *hi;
-    TAILQ_FOREACH(hi, &xh_core_hook_info, link)
+    //hook
+    xh_core_hook_info_t   *hi;
+    xh_core_ignore_info_t *ii;
+    int ignore;
+    TAILQ_FOREACH(hi, &xh_core_hook_info, link) //find hook info
     {
         if(0 == regexec(&(hi->pathname_regex), mi->pathname, 0, NULL, 0))
         {
-            xh_elf_hook(&(mi->elf), hi->symbol, hi->new_func, hi->old_func);
+            ignore = 0;
+            TAILQ_FOREACH(ii, &xh_core_ignore_info, link) //find ignore info
+            {
+                if(0 == regexec(&(ii->pathname_regex), mi->pathname, 0, NULL, 0))
+                {
+                    if(NULL == ii->symbol) //ignore all symbols
+                        return;
+
+                    if(0 == strcmp(ii->symbol, hi->symbol)) //ignore the current symbol
+                    {
+                        ignore = 1;
+                        break;
+                    }
+                }
+            }
+
+            if(0 == ignore)
+                xh_elf_hook(&(mi->elf), hi->symbol, hi->new_func, hi->old_func);
         }
     }
 }
@@ -237,6 +314,7 @@ static void xh_core_refresh_impl()
     xh_core_map_info_t      *mi, *mi_tmp;
     xh_core_map_info_t       mi_key;
     xh_core_hook_info_t     *hi;
+    xh_core_ignore_info_t   *ii;
     int                      match;
     xh_core_map_info_tree_t  map_info_refreshed = RB_INITIALIZER(&map_info_refreshed);
 
@@ -279,14 +357,28 @@ static void xh_core_refresh_impl()
         //check pathname
         //if we need to hook this elf?
         match = 0;
-        TAILQ_FOREACH(hi, &xh_core_hook_info, link)
+        TAILQ_FOREACH(hi, &xh_core_hook_info, link) //find hook info
         {
             if(0 == regexec(&(hi->pathname_regex), pathname, 0, NULL, 0))
             {
+                TAILQ_FOREACH(ii, &xh_core_ignore_info, link) //find ignore info
+                {
+                    if(0 == regexec(&(ii->pathname_regex), pathname, 0, NULL, 0))
+                    {
+                        if(NULL == ii->symbol)
+                            goto check_finished;
+
+                        if(0 == strcmp(ii->symbol, hi->symbol))
+                            goto check_continue;
+                    }
+                }
+
                 match = 1;
+            check_continue:
                 break;
             }
         }
+    check_finished:
         if(0 == match) continue;
 
         //check elf header format
@@ -416,8 +508,12 @@ static void xh_core_init_once()
 #if XH_CORE_DEBUG
     xh_core_hook_info_t *hi;
     TAILQ_FOREACH(hi, &xh_core_hook_info, link)
-        XH_LOG_INFO("  %s @ %s : %p, %p\n", hi->symbol, hi->pathname_regex_str,
+        XH_LOG_INFO("  hook: %s @ %s, (%p, %p)\n", hi->symbol, hi->pathname_regex_str,
                     hi->new_func, hi->old_func);
+    xh_core_ignore_info_t *ii;
+    TAILQ_FOREACH(ii, &xh_core_ignore_info, link)
+        XH_LOG_INFO("  ignore: %s @ %s\n", ii->symbol ? ii->symbol : "ALL ",
+                    ii->pathname_regex_str);
 #endif
     
     //register signal handler
@@ -527,7 +623,20 @@ void xh_core_clear()
         free(hi->symbol);
         free(hi);
     }
-    
+
+    //free all ignore info
+    xh_core_ignore_info_t *ii, *ii_tmp;
+    TAILQ_FOREACH_SAFE(ii, &xh_core_ignore_info, link, ii_tmp)
+    {
+        TAILQ_REMOVE(&xh_core_ignore_info, ii, link);
+#if XH_CORE_DEBUG
+        free(ii->pathname_regex_str);
+#endif
+        regfree(&(ii->pathname_regex));
+        free(ii->symbol);
+        free(ii);
+    }
+
     pthread_mutex_unlock(&xh_core_refresh_mutex);
     pthread_mutex_unlock(&xh_core_mutex);
 }

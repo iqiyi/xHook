@@ -41,4 +41,8 @@ void Java_com_qiyi_biz_NativeHandler_start(JNIEnv* env, jobject obj)
     xhook_register("^/system/.*\\.so$",  "__android_log_print", my_system_log_print,  NULL);
     xhook_register("^/vendor/.*\\.so$",  "__android_log_print", my_system_log_print,  NULL);
     xhook_register(".*/libtest\\.so$", "__android_log_print", my_libtest_log_print, NULL);
+
+    //just for testing
+    xhook_ignore(".*/liblog\\.so$", "__android_log_print"); //ignore __android_log_print in liblog.so
+    xhook_ignore(".*/libjavacore\\.so$", NULL); //ignore all hooks in libjavacore.so
 }

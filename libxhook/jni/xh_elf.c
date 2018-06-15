@@ -48,9 +48,17 @@
 #define XH_ELF_R_GENERIC_GLOB_DAT  R_ARM_GLOB_DAT       //.rel.dyn
 #define XH_ELF_R_GENERIC_ABS       R_ARM_ABS32          //.rel.dyn
 #elif defined(__aarch64__)
-#define XH_ELF_R_GENERIC_JUMP_SLOT R_AARCH64_JUMP_SLOT  //.rel.plt
-#define XH_ELF_R_GENERIC_GLOB_DAT  R_AARCH64_GLOB_DAT   //.rel.dyn
-#define XH_ELF_R_GENERIC_ABS       R_AARCH64_ABS64      //.rel.dyn
+#define XH_ELF_R_GENERIC_JUMP_SLOT R_AARCH64_JUMP_SLOT
+#define XH_ELF_R_GENERIC_GLOB_DAT  R_AARCH64_GLOB_DAT
+#define XH_ELF_R_GENERIC_ABS       R_AARCH64_ABS64
+#elif defined(__i386__)
+#define XH_ELF_R_GENERIC_JUMP_SLOT R_386_JMP_SLOT
+#define XH_ELF_R_GENERIC_GLOB_DAT  R_386_GLOB_DAT
+#define XH_ELF_R_GENERIC_ABS       R_386_32
+#elif defined(__x86_64__)
+#define XH_ELF_R_GENERIC_JUMP_SLOT R_X86_64_JUMP_SLOT
+#define XH_ELF_R_GENERIC_GLOB_DAT  R_X86_64_GLOB_DAT
+#define XH_ELF_R_GENERIC_ABS       R_X86_64_64
 #endif
 
 #if defined(__LP64__)
@@ -275,6 +283,10 @@ int xh_elf_check_elfheader(uintptr_t base_addr)
     if(EM_ARM != ehdr->e_machine) return XH_ERRNO_FORMAT;
 #elif defined(__aarch64__)
     if(EM_AARCH64 != ehdr->e_machine) return XH_ERRNO_FORMAT;
+#elif defined(__i386__)
+    if(EM_386 != ehdr->e_machine) return XH_ERRNO_FORMAT;
+#elif defined(__x86_64__)
+    if(EM_X86_64 != ehdr->e_machine) return XH_ERRNO_FORMAT;
 #else
     return XH_ERRNO_FORMAT;
 #endif

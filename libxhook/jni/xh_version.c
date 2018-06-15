@@ -25,7 +25,7 @@
 
 #define XH_VERSION_MAJOR 1
 #define XH_VERSION_MINOR 1
-#define XH_VERSION_EXTRA 5
+#define XH_VERSION_EXTRA 8
 
 #define XH_VERSION ((XH_VERSION_MAJOR << 16) | (XH_VERSION_MINOR <<  8) | (XH_VERSION_EXTRA))
 
@@ -40,6 +40,10 @@
 #define XH_VERSION_ARCH "arm"
 #elif defined(__aarch64__)
 #define XH_VERSION_ARCH "aarch64"
+#elif defined(__i386__)
+#define XH_VERSION_ARCH "x86"
+#elif defined(__x86_64__)
+#define XH_VERSION_ARCH "x86_64"
 #else
 #define XH_VERSION_ARCH "unknown"
 #endif

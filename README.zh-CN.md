@@ -1,16 +1,10 @@
-```
+<p align="center"><img src="https://github.com/iqiyi/xHook/blob/master/docs/xhooklogo.png?raw=true" alt="xhook" width="50%"></p>
 
-              oooo                            oooo        
-              `888                            `888        
-  oooo    ooo  888 .oo.    .ooooo.   .ooooo.   888  oooo  
-   `88b..8P'   888P"Y88b  d88' `88b d88' `88b  888 .8P'   
-     Y888'     888   888  888   888 888   888  888888.    
-   .o8"'88b    888   888  888   888 888   888  888 `88b.  
-  o88'   888o o888o o888o `Y8bod8P' `Y8bod8P' o888o o888o 
-
-```
 
 [README English Version](README.md)
+
+[Android PLT hook 概述 中文版](docs/overview/android_plt_hook_overview.zh-CN.md)
+
 
 # 概述
 
@@ -22,9 +16,10 @@ xhook 一直在稳定性和兼容性方面做着持续的优化。
 # 特征
 
 * 支持 Android 4.0 (含) 以上版本 (API level >= 14)。
-* 支持 armeabi, armeabi-v7a 和 arm64-v8a。
+* 支持 armeabi，armeabi-v7a，arm64-v8a，x86 和 x86_64。
 * 支持 **ELF HASH** 和 **GNU HASH** 索引的符号。
 * 支持 **SLEB128** 编码的重定位信息。
+* 支持通过正则表达式批量设置 hook 信息。
 * **不**需要 ROOT 权限。
 * 不依赖于任何的第三方动态库。
 * 纯 C 的代码。比较小的库体积。
@@ -84,9 +79,22 @@ int xhook_register(const char  *pathname_regex_str,
 
 成功返回 0，失败返回 非0。
 
+`pathname_regex_str` 只支持 **POSIX BRE (Basic Regular Expression)** 定义的正则表达式语法。
+
+## 2. 忽略部分 hook 信息
+
+```c
+int xhook_ignore(const char *pathname_regex_str,  
+                 const char *symbol);
+```
+
+根据 `pathname_regex_str` 和 `symbol`，从已经通过 `xhook_register` 注册的 hook 信息中，忽略一部分 hook 信息。如果 `symbol` 为 `NULL`，xhook 将忽略所有路径名符合正则表达式 `pathname_regex_str` 的 ELF。
+
+成功返回 0，失败返回 非0。
+
 `pathname_regex_str` 只支持 **POSIX BRE** 定义的正则表达式语法。
 
-## 2. 执行 hook
+## 3. 执行 hook
 
 ```c
 int xhook_refresh(int async);
@@ -100,7 +108,7 @@ int xhook_refresh(int async);
 
 xhook 在内部维护了一个全局的缓存，用于保存最后一次从 `/proc/self/maps` 读取到的 ELF 加载信息。每次一调用 `xhook_refresh` 函数，这个缓存都将被更新。xhook 使用这个缓存来判断哪些 ELF 是这次新被加载到内存中的。我们每次只需要针对这些新加载的 ELF 做 hook 就可以了。
 
-## 3. 清除缓存
+## 4. 清除缓存
 
 ```c
 void xhook_clear();
@@ -110,7 +118,7 @@ void xhook_clear();
 
 如果你确定你需要的所有 PLT 入口点都已经被替换了，你可以调用这个函数来释放和节省一些内存空间。
 
-## 4. 启用/禁用 调试信息
+## 5. 启用/禁用 调试信息
 
 ```c
 void xhook_enable_debug(int flag);
@@ -120,7 +128,7 @@ void xhook_enable_debug(int flag);
 
 调试信息将被输出到 logcat，对应的 TAG 为：`xhook`。
 
-## 5. 启用/禁用 SFP (段错误保护)
+## 6. 启用/禁用 SFP (段错误保护)
 
 ```c
 void xhook_enable_sigsegv_protection(int flag);
@@ -158,9 +166,13 @@ xhook_register(".*\\.so$", "__android_log_print",  my_log_print,  NULL);
 xhook_register(".*\\.so$", "__android_log_vprint", my_log_vprint, NULL);
 xhook_register(".*\\.so$", "__android_log_assert", my_log_assert, NULL);
 
-//追踪某些调用
+//追踪某些调用 (忽略 linker 和 linker64)
 xhook_register("^/system/.*$", "mmap",   my_mmap,   NULL);
 xhook_register("^/vendor/.*$", "munmap", my_munmap, NULL);
+xhook_ignore  (".*/linker$",   "mmap");
+xhook_ignore  (".*/linker$",   "munmap");
+xhook_ignore  (".*/linker64$", "mmap");
+xhook_ignore  (".*/linker64$", "munmap");
 
 //防御某些注入攻击
 xhook_register(".*com\\.hacker.*\\.so$", "malloc",  my_malloc_always_return_NULL, NULL);
@@ -169,9 +181,13 @@ xhook_register(".*/libhacker\\.so$",     "connect", my_connect_with_recorder,   
 //修复某些系统 bug
 xhook_register(".*some_vendor.*/libvictim\\.so$", "bad_func", my_nice_func, NULL);
 
+//忽略 libwebviewchromium.so 的所有 hook 信息
+xhook_ignore(".*/libwebviewchromium.so$", NULL);
+
 //现在执行 hook!
 xhook_refresh(1);
 ```
+
 
 # 许可证
 
@@ -179,9 +195,11 @@ Copyright (c) 2018-present, 爱奇艺, Inc. All rights reserved.
 
 xhook 中大多数的源码使用 MIT 许可证，另外的一些源码使用 BSD 样式的许可证。
 
-详细信息请查看 LICENSE 文件。
+详细信息请查看 [LICENSE](LICENSE) 文件。
+
+xhook 的文档使用 [Creative Commons 许可证](LICENSE-docs)。
 
 
 # 联系方式
 
-github: https://github.com/iqiyi/xhook
+https://github.com/iqiyi/xhook

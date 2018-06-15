@@ -38,7 +38,8 @@
 #include "xh_log.h"
 
 #define PAGE_START(addr) ((addr) & PAGE_MASK)
-#define PAGE_END(addr)   (PAGE_START(addr) + PAGE_SIZE)
+#define PAGE_END(addr)   (PAGE_START(addr + sizeof(uintptr_t) - 1) + PAGE_SIZE)
+#define PAGE_COVER(addr) (PAGE_END(addr) - PAGE_START(addr))
 
 int xh_util_get_mem_protect(uintptr_t addr, size_t len, const char *pathname, unsigned int *prot)
 {
@@ -108,7 +109,7 @@ int xh_util_get_addr_protect(uintptr_t addr, const char *pathname, unsigned int 
 
 int xh_util_set_addr_protect(uintptr_t addr, unsigned int prot)
 {
-    if(0 != mprotect((void *)PAGE_START(addr), PAGE_SIZE, (int)prot))
+    if(0 != mprotect((void *)PAGE_START(addr), PAGE_COVER(addr), (int)prot))
         return 0 == errno ? XH_ERRNO_UNKNOWN : errno;
     
     return 0;
