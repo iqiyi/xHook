@@ -591,13 +591,17 @@ void xh_core_clear()
         pthread_mutex_unlock(&xh_core_mutex);
         
         pthread_join(xh_core_refresh_thread_tid, NULL);
+        xh_core_async_init_ok = 0;
     }
+    xh_core_async_inited = 0;
 
     //unregister the sig handler
     if(xh_core_init_ok)
     {
         xh_core_del_sigsegv_handler();
+        xh_core_init_ok = 0;
     }
+    xh_core_inited = 0;
 
     pthread_mutex_lock(&xh_core_mutex);
     pthread_mutex_lock(&xh_core_refresh_mutex);
