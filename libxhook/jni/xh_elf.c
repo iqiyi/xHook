@@ -857,6 +857,9 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
             break;
         case DT_HASH:
             {
+                //ignore DT_HASH when ELF contains DT_GNU_HASH hash table
+                if(1 == self->is_use_gnu_hash) continue;
+
                 raw = (uint32_t *)(self->bias_addr + dyn->d_un.d_ptr);
                 if((ElfW(Addr))raw < self->base_addr) return XH_ERRNO_FORMAT;
                 self->bucket_cnt  = raw[0];
