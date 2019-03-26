@@ -1,57 +1,46 @@
 <p align="center"><img src="https://github.com/iqiyi/xHook/blob/master/docs/xhooklogo.png?raw=true" alt="xhook" width="50%"></p>
 
+# xHook
+
+![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
+![](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)
+![](https://img.shields.io/badge/release-1.1.10-red.svg?style=flat)
+![](https://img.shields.io/badge/Android-4.0%20--%209.0-blue.svg?style=flat)
+![](https://img.shields.io/badge/arch-armeabi%20%7C%20armeabi--v7a%20%7C%20arm64--v8a%20%7C%20x86%20%7C%20x86__64-blue.svg?style=flat)
 
 [README 中文版](README.zh-CN.md)
 
 [Android PLT hook 概述 中文版](docs/overview/android_plt_hook_overview.zh-CN.md)
 
+xHook is a PLT (Procedure Linkage Table) hook library for Android native ELF (executable and shared libraries).
 
-# Overview
-
-xhook is a PLT (Procedure Linkage Table) hook library for Android native ELF (executable and shared libraries).
-
-xhook has been keeping optimized for stability and compatibility.
+xHook has been keeping optimized for stability and compatibility.
 
 
-# Features
+## Features
 
-* Support Android 4.0+ (API level 14+).
+* Support Android 4.0 - 9.0 (API level 14 - 28).
 * Support armeabi, armeabi-v7a, arm64-v8a, x86 and x86_64.
 * Support **ELF HASH** and **GNU HASH** indexed symbols.
 * Support **SLEB128** encoded relocation info.
 * Support setting hook info via regular expressions.
-* Do **NOT** need root permission.
+* Do not require root permission or any system permissions.
 * Do not depends on any third-party shared libraries.
-* Pure C code. Small library size.
 
 
-# Build
+## Build
 
-You need google NDK for building xhook.  
-See: https://developer.android.com/ndk/downloads/index.html
+* Download [Android NDK r16b](https://developer.android.com/ndk/downloads/revision_history.html), set environment PATH. (support for armeabi has been removed since r17)
 
-The latest version of xhook is developed and debugged with the NDK version **r16b**.
-
-* build the libraries (libxhook.so and other libraries for test)
+* Build and install the native libraries.
 
 ```
 ./build_libs.sh
-```
-
-* install the libraries to test project's libs path
-
-```
 ./install_libs.sh
 ```
 
-* clean the libraries
 
-```
-./clean_libs.sh
-```
-
-
-# Demo
+## Demo
 
 ```
 cd ./xhookwrapper/
@@ -60,11 +49,11 @@ adb install ./app/build/outputs/apk/debug/app-debug.apk
 ```
 
 
-# API
+## API
 
 External API header file: `libxhook/jni/xhook.h`
 
-## 1. Register hook info
+### 1. Register hook info
 
 ```c
 int xhook_register(const char  *pathname_regex_str,  
@@ -81,7 +70,7 @@ Return zero if successful, non-zero otherwise.
 
 The regular expression for `pathname_regex_str` only support **POSIX BRE (Basic Regular Expression)**.
 
-## 2. Ignore some hook info
+### 2. Ignore some hook info
 
 ```c
 int xhook_ignore(const char *pathname_regex_str,  
@@ -94,7 +83,7 @@ Return zero if successful, non-zero otherwise.
 
 The regular expression for `pathname_regex_str` only support **POSIX BRE**.
 
-## 3. Do hook
+### 3. Do hook
 
 ```c
 int xhook_refresh(int async);
@@ -108,7 +97,7 @@ Return zero if successful, non-zero otherwise.
 
 xhook will keep a global cache for saving the last ELF loading info from `/proc/self/maps`. This cache will also be updated in `xhook_refresh`. With this cache, `xhook_refresh` can determine which ELF is newly loaded. We only need to do hook in these newly loaded ELF.
 
-## 4. Clear cache
+### 4. Clear cache
 
 ```c
 void xhook_clear();
@@ -118,7 +107,7 @@ Clear all cache owned by xhook, reset all global flags to default value.
 
 If you confirm that all PLT entries you want have been hooked, you could call this function to save some memory.
 
-## 5. Enable/Disable debug info
+### 5. Enable/Disable debug info
 
 ```c
 void xhook_enable_debug(int flag);
@@ -128,7 +117,7 @@ Pass `1` to `flag` for enable debug info. Pass `0` to `flag` for disable. (**dis
 
 Debug info will be sent to logcat with tag `xhook`.
 
-## 6. Enable/Disable SFP (segmentation fault protection)
+### 6. Enable/Disable SFP (segmentation fault protection)
 
 ```c
 void xhook_enable_sigsegv_protection(int flag);
@@ -141,7 +130,7 @@ xhook is NOT a compliant business layer library. We have to calculate the value 
 **You should always enable SFP for release-APP, this will prevent your app from crashing. On the other hand, you should always disable SFP for debug-APP, so you can't miss any common coding mistakes that should be fixed.**
 
 
-# Examples
+## Examples
 
 ```c
 //detect memory leaks
@@ -189,17 +178,13 @@ xhook_refresh(1);
 ```
 
 
-# License
+## Contributing
 
-Copyright (c) 2018-present, iQIYI, Inc. All rights reserved.
-
-Most source code in xhook are MIT licensed. Some other source code have BSD-style licenses.
-
-Please refer to the [LICENSE](LICENSE) file for detailed information.
-
-xhook documentation is [Creative Commons licensed](LICENSE-docs).
+See [xHook Contributing Guide](CONTRIBUTING.md).
 
 
-# Contacts
+## License
 
-https://github.com/iqiyi/xhook
+xHook is MIT licensed, as found in the [LICENSE](LICENSE) file.
+
+xHook documentation is Creative Commons licensed, as found in the [LICENSE-docs](LICENSE-docs) file.

@@ -1,57 +1,46 @@
 <p align="center"><img src="https://github.com/iqiyi/xHook/blob/master/docs/xhooklogo.png?raw=true" alt="xhook" width="50%"></p>
 
+# xHook
+
+![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
+![](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)
+![](https://img.shields.io/badge/release-1.1.10-red.svg?style=flat)
+![](https://img.shields.io/badge/Android-4.0%20--%209.0-blue.svg?style=flat)
+![](https://img.shields.io/badge/arch-armeabi%20%7C%20armeabi--v7a%20%7C%20arm64--v8a%20%7C%20x86%20%7C%20x86__64-blue.svg?style=flat)
 
 [README English Version](README.md)
 
 [Android PLT hook 概述 中文版](docs/overview/android_plt_hook_overview.zh-CN.md)
 
+xHook 是一个针对 Android 平台 ELF (可执行文件和动态库) 的 PLT (Procedure Linkage Table) hook 库。
 
-# 概述
-
-xhook 是一个针对 Android 平台 ELF (可执行文件和动态库) 的 PLT (Procedure Linkage Table) hook 库。
-
-xhook 一直在稳定性和兼容性方面做着持续的优化。
+xHook 一直在稳定性和兼容性方面做着持续的优化。
 
 
-# 特征
+## 特征
 
-* 支持 Android 4.0 (含) 以上版本 (API level >= 14)。
+* 支持 Android 4.0 - 9.0（API level 14 - 28）。
 * 支持 armeabi，armeabi-v7a，arm64-v8a，x86 和 x86_64。
 * 支持 **ELF HASH** 和 **GNU HASH** 索引的符号。
 * 支持 **SLEB128** 编码的重定位信息。
 * 支持通过正则表达式批量设置 hook 信息。
-* **不**需要 ROOT 权限。
+* 不需要 root 权限或任何系统权限。
 * 不依赖于任何的第三方动态库。
-* 纯 C 的代码。比较小的库体积。
 
 
-# 编译
+## 编译
 
-你需要 google NDK 来编译 xhook。  
-https://developer.android.com/ndk/downloads/index.html
+* 下载 [Android NDK r16b](https://developer.android.com/ndk/downloads/revision_history.html)，设置 PATH 环境变量。（对 armeabi 的支持，从 r17 版本开始被移除了）
 
-最新版本的 xhook 在开发和调试中使用的 NDK 版本是 **r16b**。
-
-* 编译动态库 (libxhook.so 和其他的用于测试的动态库)
+* 编译和安装 native 库。
 
 ```
 ./build_libs.sh
-```
-
-* 把动态库安装到 Demo 工程的 libs 目录中
-
-```
 ./install_libs.sh
 ```
 
-* 清除动态库
 
-```
-./clean_libs.sh
-```
-
-
-# Demo
+## Demo
 
 ```
 cd ./xhookwrapper/
@@ -60,11 +49,11 @@ adb install ./app/build/outputs/apk/debug/app-debug.apk
 ```
 
 
-# API
+## API
 
 外部 API 头文件: `libxhook/jni/xhook.h`
 
-## 1. 注册 hook 信息
+### 1. 注册 hook 信息
 
 ```c
 int xhook_register(const char  *pathname_regex_str,  
@@ -81,7 +70,7 @@ int xhook_register(const char  *pathname_regex_str,
 
 `pathname_regex_str` 只支持 **POSIX BRE (Basic Regular Expression)** 定义的正则表达式语法。
 
-## 2. 忽略部分 hook 信息
+### 2. 忽略部分 hook 信息
 
 ```c
 int xhook_ignore(const char *pathname_regex_str,  
@@ -94,7 +83,7 @@ int xhook_ignore(const char *pathname_regex_str,
 
 `pathname_regex_str` 只支持 **POSIX BRE** 定义的正则表达式语法。
 
-## 3. 执行 hook
+### 3. 执行 hook
 
 ```c
 int xhook_refresh(int async);
@@ -108,7 +97,7 @@ int xhook_refresh(int async);
 
 xhook 在内部维护了一个全局的缓存，用于保存最后一次从 `/proc/self/maps` 读取到的 ELF 加载信息。每次一调用 `xhook_refresh` 函数，这个缓存都将被更新。xhook 使用这个缓存来判断哪些 ELF 是这次新被加载到内存中的。我们每次只需要针对这些新加载的 ELF 做 hook 就可以了。
 
-## 4. 清除缓存
+### 4. 清除缓存
 
 ```c
 void xhook_clear();
@@ -118,7 +107,7 @@ void xhook_clear();
 
 如果你确定你需要的所有 PLT 入口点都已经被替换了，你可以调用这个函数来释放和节省一些内存空间。
 
-## 5. 启用/禁用 调试信息
+### 5. 启用/禁用 调试信息
 
 ```c
 void xhook_enable_debug(int flag);
@@ -128,7 +117,7 @@ void xhook_enable_debug(int flag);
 
 调试信息将被输出到 logcat，对应的 TAG 为：`xhook`。
 
-## 6. 启用/禁用 SFP (段错误保护)
+### 6. 启用/禁用 SFP (段错误保护)
 
 ```c
 void xhook_enable_sigsegv_protection(int flag);
@@ -141,7 +130,7 @@ xhook 并不是一个常规的业务层的动态库。在 xhook 中，我们不�
 **在 release 版本的 APP 中，你应该始终启用 SFP，这能防止你的 APP 因为 xhook 而崩溃。在 debug 版本的 APP 中，你应该始终禁用 SFP，这样你就不会丢失那些一般性的编码失误导致的段错误，这些段错误是应该被修复的。**
 
 
-# 应用举例
+## 例子
 
 ```c
 //监测内存泄露
@@ -189,17 +178,13 @@ xhook_refresh(1);
 ```
 
 
-# 许可证
+## 贡献
 
-Copyright (c) 2018-present, 爱奇艺, Inc. All rights reserved.
-
-xhook 中大多数的源码使用 MIT 许可证，另外的一些源码使用 BSD 样式的许可证。
-
-详细信息请查看 [LICENSE](LICENSE) 文件。
-
-xhook 的文档使用 [Creative Commons 许可证](LICENSE-docs)。
+请阅读 [xHook Contributing Guide](CONTRIBUTING.md)。
 
 
-# 联系方式
+## 许可证
 
-https://github.com/iqiyi/xhook
+xHook 使用 [MIT 许可证](LICENSE)。
+
+xHook 的文档使用 [Creative Commons 许可证](LICENSE-docs)。
