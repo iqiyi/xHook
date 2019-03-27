@@ -1,2 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.qiyi.xhook" />
+    package="com.qiyi.xhook"
+    android:versionCode="1"
+    android:versionName="1.0" />
