@@ -89,8 +89,9 @@ static void *xh_elf_plain_reloc_iterator_next(xh_elf_plain_reloc_iterator_t *sel
 {
     if(self->cur >= self->end) return NULL;
 
+    void *ret = (void *)(self->cur);
     self->cur += (self->is_use_rela ? sizeof(ElfW(Rela)) : sizeof(ElfW(Rel)));
-    return (void *)(self->cur);
+    return ret;
 }
 
 //sleb128 decoder
