@@ -178,6 +178,14 @@ xhook_refresh(1);
 ```
 
 
+## 技术支持
+
+1. 查看 [xhook-sample](libbiz/jni)。
+2. 在 [GitHub issues](https://github.com/iqiyi/xHook/issues) 交流。
+3. 邮件: <a href="mailto:caikelun@gmail.com">caikelun@gmail.com</a>
+4. 微信: alan_choi
+
+
 ## 贡献
 
 请阅读 [xHook Contributing Guide](CONTRIBUTING.md)。
