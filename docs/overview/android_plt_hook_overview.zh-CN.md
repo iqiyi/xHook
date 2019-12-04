@@ -768,6 +768,13 @@ inline hook 方案强大的同时可能带来以下的问题：
 建议如果 PLT hook 够用的话，就不必尝试 inline hook 了。
 
 
+## 联系作者
+
+
+* caikelun@gmail.com
+* https://github.com/caikelun
+
+
 ## 许可证
 
 

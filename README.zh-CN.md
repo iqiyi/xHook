@@ -4,8 +4,8 @@
 
 ![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
 ![](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)
-![](https://img.shields.io/badge/release-1.1.12-red.svg?style=flat)
-![](https://img.shields.io/badge/Android-4.0%20--%209.0-blue.svg?style=flat)
+![](https://img.shields.io/badge/release-1.2.0-red.svg?style=flat)
+![](https://img.shields.io/badge/Android-4.0%20--%2010-blue.svg?style=flat)
 ![](https://img.shields.io/badge/arch-armeabi%20%7C%20armeabi--v7a%20%7C%20arm64--v8a%20%7C%20x86%20%7C%20x86__64-blue.svg?style=flat)
 
 [README English Version](README.md)
@@ -19,7 +19,7 @@ xHook 一直在稳定性和兼容性方面做着持续的优化。
 
 ## 特征
 
-* 支持 Android 4.0 - 9.0（API level 14 - 28）。
+* 支持 Android 4.0 - 10（API level 14 - 29）。
 * 支持 armeabi，armeabi-v7a，arm64-v8a，x86 和 x86_64。
 * 支持 **ELF HASH** 和 **GNU HASH** 索引的符号。
 * 支持 **SLEB128** 编码的重定位信息。

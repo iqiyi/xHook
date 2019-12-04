@@ -24,8 +24,8 @@
 #include "xh_version.h"
 
 #define XH_VERSION_MAJOR 1
-#define XH_VERSION_MINOR 1
-#define XH_VERSION_EXTRA 12
+#define XH_VERSION_MINOR 2
+#define XH_VERSION_EXTRA 0
 
 #define XH_VERSION ((XH_VERSION_MAJOR << 16) | (XH_VERSION_MINOR <<  8) | (XH_VERSION_EXTRA))
 
