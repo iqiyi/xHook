@@ -180,12 +180,9 @@ xhook_refresh(1);
 
 ## 技术支持
 
-1. 查看 [xhook-sample](libbiz/jni)。
-2. 在 [GitHub issues](https://github.com/iqiyi/xHook/issues) 交流。
-3. 邮件: <a href="mailto:caikelun@gmail.com">caikelun@gmail.com</a>
-5. QQ 群: 603635869。二维码:
-
-<p align="left"><img src="docs/qq_group.jpg" alt="qq group" width="320px"></p>
+* [GitHub Issues](https://github.com/iqiyi/xHook/issues)
+* [GitHub Discussions](https://github.com/iqiyi/xHook/discussions)
+* [Telegram Public Group](https://t.me/android_native_geeks)
 
 
 ## 贡献
