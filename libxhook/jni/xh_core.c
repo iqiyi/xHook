@@ -88,23 +88,48 @@ static int              xh_core_sigsegv_enable = 1; //enable by default
 static struct sigaction xh_core_sigsegv_act_old;
 static volatile int     xh_core_sigsegv_flag = 0;
 static sigjmp_buf       xh_core_sigsegv_env;
-static void xh_core_sigsegv_handler(int sig)
+static void xh_core_sigsegv_handler(int signum, siginfo_t* siginfo, void* context)
 {
-    (void)sig;
-    
     if(xh_core_sigsegv_flag)
+    {
         siglongjmp(xh_core_sigsegv_env, 1);
+    }
     else
-        sigaction(SIGSEGV, &xh_core_sigsegv_act_old, NULL);
+    {
+        // sigaction(SIGSEGV, &xh_core_sigsegv_act_old, NULL);
+        if (xh_core_sigsegv_act_old.sa_flags & SA_SIGINFO)
+        {
+            xh_core_sigsegv_act_old.sa_sigaction(signum, siginfo, context);
+        }
+        else
+        {
+            if (SIG_DFL == xh_core_sigsegv_act_old.sa_handler)
+            {
+                // If the previous handler was the default handler, cause a core dump.
+                signal(signum, SIG_DFL);
+                raise(signum);
+            }
+            else if (SIG_IGN == xh_core_sigsegv_act_old.sa_handler)
+            {
+                return;
+            }
+            else
+            {
+                xh_core_sigsegv_act_old.sa_handler(signum);
+            }
+        }
+    }
 }
 static int xh_core_add_sigsegv_handler()
 {
     struct sigaction act;
 
     if(!xh_core_sigsegv_enable) return 0;
-    
+
+    memset(&act, 0, sizeof(struct sigaction));
     if(0 != sigemptyset(&act.sa_mask)) return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
-    act.sa_handler = xh_core_sigsegv_handler;
+    act.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESTART;
+    act.sa_sigaction = xh_core_sigsegv_handler;
     
     if(0 != sigaction(SIGSEGV, &act, &xh_core_sigsegv_act_old))
         return (0 == errno ? XH_ERRNO_UNKNOWN : errno);
