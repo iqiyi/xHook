@@ -37,8 +37,22 @@
 #include "xh_errno.h"
 #include "xh_log.h"
 
-#define PAGE_START(addr) ((addr) & PAGE_MASK)
-#define PAGE_END(addr)   (PAGE_START(addr + sizeof(uintptr_t) - 1) + PAGE_SIZE)
+// NDK 28+ no longer defines PAGE_SIZE and PAGE_MASK by default
+// Use runtime functions for flexible page size support
+static inline size_t get_page_size(void) {
+    static size_t page_size = 0;
+    if (page_size == 0) {
+        page_size = sysconf(_SC_PAGESIZE);
+    }
+    return page_size;
+}
+
+static inline uintptr_t get_page_mask(void) {
+    return ~(get_page_size() - 1);
+}
+
+#define PAGE_START(addr) ((addr) & get_page_mask())
+#define PAGE_END(addr)   (PAGE_START(addr + sizeof(uintptr_t) - 1) + get_page_size())
 #define PAGE_COVER(addr) (PAGE_END(addr) - PAGE_START(addr))
 
 int xh_util_get_mem_protect(uintptr_t addr, size_t len, const char *pathname, unsigned int *prot)
